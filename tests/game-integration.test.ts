@@ -65,17 +65,18 @@ describe("full round flow", () => {
     round = takeHint(round);
     expect(round.hintStep).toBe(3);
 
-    const guess = item.chapterIndex + 40;
+    const guess = item.verseIndex + 1000; // half-life offset in verses
     const { round: done } = confirmGuess(round, guess, fixed);
     expect(done.phase).toBe("revealed");
     expect(done.result).not.toBeNull();
-    const expected = scoreRound(guess, item.chapterIndex, 3);
+    const expected = scoreRound(guess, item.verseIndex, 3);
     expect(done.result!.total).toBe(expected.total);
-    expect(done.result!.distance).toBe(40);
+    expect(done.result!.distance).toBe(1000);
     expect(done.result!.distancePts).toBe(500);
 
     const share = shareForRound(done);
     expect(share).toContain(`Canonmark #${n}`);
+    expect(share).toContain("1000 v");
   });
 
   it("endless produces a playable round from pool", () => {
@@ -101,7 +102,7 @@ describe("full round flow", () => {
     const refB = selectPoolItemForPuzzle(n, pool).ref;
     expect(refA).toBe(refB);
 
-    const scored = scoreRound(930, 970, 1); // d=40, ×3
+    const scored = scoreRound(1000, 2000, 1); // d=1000 verses, ×3
     expect(scored.distancePts).toBe(500);
     expect(scored.total).toBe(1500);
   });

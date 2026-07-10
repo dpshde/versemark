@@ -2,13 +2,13 @@
  * localStorage persistence for daily results / streak / history.
  */
 
-const KEY = "canonmark:v1";
+const KEY = "canonmark:v2";
 
 export interface DailyResultRecord {
   puzzleNumber: number;
   dateKey: string; // YYYY-MM-DD local
-  guessChapterIndex: number;
-  trueChapterIndex: number;
+  guessVerseIndex: number;
+  trueVerseIndex: number;
   trueRef: string;
   distance: number;
   total: number;

@@ -1,5 +1,6 @@
 /**
- * Canonical 66-book / 1,189-chapter axis metadata.
+ * Canonical 66-book axis metadata — verse-level (1..TOTAL_VERSES).
+ * Chapter indices retained for book layout; selection is verse-precise.
  */
 import booksData from "../data/books.json";
 
@@ -17,18 +18,27 @@ export interface BookMeta {
   osis: string;
   bsb: string;
   chapters: number;
-  /** Inclusive 1-based chapter index on the global axis. */
+  verses: number;
+  /** Inclusive 1-based chapter index on the global chapter axis. */
   startChapterIndex: number;
   endChapterIndex: number;
+  /** Inclusive 1-based verse index on the global verse axis. */
+  startVerseIndex: number;
+  endVerseIndex: number;
+  /** Verse count per chapter (1-indexed via array offset 0). */
+  versesPerChapter: number[];
   genre: Genre;
   testament: "OT" | "NT";
 }
 
 export const TOTAL_CHAPTERS = 1189 as const;
+export const TOTAL_VERSES = (booksData as { totalVerses: number }).totalVerses;
 
-export const BOOKS: readonly BookMeta[] = booksData.books as BookMeta[];
+export const BOOKS: readonly BookMeta[] = (
+  booksData as { books: BookMeta[] }
+).books;
 
-/** Testament-half quadrants (ADR: score-with-distance-and-hint-multiplier). */
+/** Testament-half quadrants (verse indices on the full canon). */
 export type TestamentQuadrant =
   | "ot-first"
   | "ot-second"
@@ -38,47 +48,97 @@ export type TestamentQuadrant =
 export interface QuadrantInfo {
   id: TestamentQuadrant;
   label: string;
-  startChapterIndex: number;
-  endChapterIndex: number;
+  startVerseIndex: number;
+  endVerseIndex: number;
 }
 
+/** Fixed quadrants aligned to book boundaries (ADR). */
 export const QUADRANTS: readonly QuadrantInfo[] = [
   {
     id: "ot-first",
     label: "first half of the Old Testament (Law and History)",
-    startChapterIndex: 1,
-    endChapterIndex: 436,
+    startVerseIndex: 1,
+    endVerseIndex: 12870,
   },
   {
     id: "ot-second",
     label: "second half of the Old Testament (Poetry and Prophets)",
-    startChapterIndex: 437,
-    endChapterIndex: 929,
+    startVerseIndex: 12871,
+    endVerseIndex: 23145,
   },
   {
     id: "nt-first",
     label: "first half of the New Testament (Gospels and Acts)",
-    startChapterIndex: 930,
-    endChapterIndex: 1046,
+    startVerseIndex: 23146,
+    endVerseIndex: 27931,
   },
   {
     id: "nt-second",
     label: "second half of the New Testament (Epistles and Revelation)",
-    startChapterIndex: 1047,
-    endChapterIndex: 1189,
+    startVerseIndex: 27932,
+    endVerseIndex: TOTAL_VERSES,
   },
 ] as const;
 
-export function chapterIndexFor(
+/** Last OT verse index (Malachi ends here). */
+export const TESTAMENT_SEAM_AFTER = (
+  booksData as { otEndVerseIndex: number }
+).otEndVerseIndex;
+
+export function verseIndexFor(
   osis: string,
-  chapter: number
+  chapter: number,
+  verse: number
 ): number | null {
   const book = BOOKS.find((b) => b.osis === osis);
   if (!book) return null;
   if (chapter < 1 || chapter > book.chapters) return null;
-  return book.startChapterIndex + chapter - 1;
+  const chVerses = book.versesPerChapter[chapter - 1] ?? 0;
+  if (verse < 1 || verse > chVerses) return null;
+  const prior = book.versesPerChapter
+    .slice(0, chapter - 1)
+    .reduce((a, n) => a + n, 0);
+  return book.startVerseIndex + prior + verse - 1;
 }
 
+/** @deprecated Prefer verseIndexFor — chapter start as verse index. */
+export function chapterIndexFor(
+  osis: string,
+  chapter: number
+): number | null {
+  return verseIndexFor(osis, chapter, 1);
+}
+
+export function bookChapterVerseFromIndex(verseIndex: number): {
+  book: BookMeta;
+  chapter: number;
+  verse: number;
+} | null {
+  if (verseIndex < 1 || verseIndex > TOTAL_VERSES) return null;
+  for (const book of BOOKS) {
+    if (
+      verseIndex >= book.startVerseIndex &&
+      verseIndex <= book.endVerseIndex
+    ) {
+      let offset = verseIndex - book.startVerseIndex;
+      for (let c = 0; c < book.chapters; c++) {
+        const n = book.versesPerChapter[c];
+        if (offset < n) {
+          return { book, chapter: c + 1, verse: offset + 1 };
+        }
+        offset -= n;
+      }
+      return {
+        book,
+        chapter: book.chapters,
+        verse: book.versesPerChapter[book.chapters - 1],
+      };
+    }
+  }
+  return null;
+}
+
+/** Chapter-axis lookup (for book segment layout helpers). */
 export function bookAndChapterFromIndex(chapterIndex: number): {
   book: BookMeta;
   chapter: number;
@@ -98,17 +158,22 @@ export function bookAndChapterFromIndex(chapterIndex: number): {
   return null;
 }
 
-export function formatChapterLabel(chapterIndex: number): string {
-  const loc = bookAndChapterFromIndex(chapterIndex);
-  if (!loc) return `Ch ${chapterIndex}`;
-  return `${loc.book.name} ${loc.chapter}`;
+export function formatVerseLabel(verseIndex: number): string {
+  const loc = bookChapterVerseFromIndex(verseIndex);
+  if (!loc) return `V ${verseIndex}`;
+  return `${loc.book.name} ${loc.chapter}:${loc.verse}`;
 }
 
-export function quadrantForChapter(chapterIndex: number): QuadrantInfo {
+/** @deprecated Use formatVerseLabel. */
+export function formatChapterLabel(index: number): string {
+  return formatVerseLabel(index);
+}
+
+export function quadrantForVerse(verseIndex: number): QuadrantInfo {
   for (const q of QUADRANTS) {
     if (
-      chapterIndex >= q.startChapterIndex &&
-      chapterIndex <= q.endChapterIndex
+      verseIndex >= q.startVerseIndex &&
+      verseIndex <= q.endVerseIndex
     ) {
       return q;
     }
@@ -116,5 +181,7 @@ export function quadrantForChapter(chapterIndex: number): QuadrantInfo {
   return QUADRANTS[0];
 }
 
-/** Testament seam chapter index: last OT chapter. */
-export const TESTAMENT_SEAM_AFTER = 929;
+/** @deprecated Use quadrantForVerse. */
+export function quadrantForChapter(index: number): QuadrantInfo {
+  return quadrantForVerse(index);
+}

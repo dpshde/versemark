@@ -1,8 +1,8 @@
 /**
- * Wordle-style share string for daily results.
+ * Wordle-style share string for round results.
  */
 import type { HintStep } from "./scoring";
-import { TOTAL_CHAPTERS } from "./books";
+import { TOTAL_VERSES } from "./books";
 
 const APP_URL = "https://canonmark.app";
 
@@ -11,23 +11,29 @@ const APP_URL = "https://canonmark.app";
  * true position = pushpin, guess = blue circle, empty = white square.
  */
 export function distanceEmojiBand(
-  guessChapterIndex: number,
-  trueChapterIndex: number,
+  guessVerseIndex: number,
+  trueVerseIndex: number,
   cells = 7
 ): string {
   const truePos = Math.min(
     cells - 1,
-    Math.max(0, Math.round(((trueChapterIndex - 1) / (TOTAL_CHAPTERS - 1)) * (cells - 1)))
+    Math.max(
+      0,
+      Math.round(((trueVerseIndex - 1) / (TOTAL_VERSES - 1)) * (cells - 1))
+    )
   );
   let guessPos = Math.min(
     cells - 1,
     Math.max(
       0,
-      Math.round(((guessChapterIndex - 1) / (TOTAL_CHAPTERS - 1)) * (cells - 1))
+      Math.round(((guessVerseIndex - 1) / (TOTAL_VERSES - 1)) * (cells - 1))
     )
   );
-  if (guessPos === truePos && guessChapterIndex !== trueChapterIndex) {
-    guessPos = Math.min(cells - 1, truePos + (guessChapterIndex > trueChapterIndex ? 1 : -1));
+  if (guessPos === truePos && guessVerseIndex !== trueVerseIndex) {
+    guessPos = Math.min(
+      cells - 1,
+      truePos + (guessVerseIndex > trueVerseIndex ? 1 : -1)
+    );
     if (guessPos < 0) guessPos = truePos + 1;
   }
 
@@ -48,21 +54,44 @@ export function hintEmoji(hintStep: HintStep): string {
 }
 
 export interface SharePayload {
-  puzzleNumber: number;
-  guessChapterIndex: number;
-  trueChapterIndex: number;
+  /** Daily puzzle number; omit for practice rounds. */
+  puzzleNumber?: number | null;
+  guessVerseIndex: number;
+  trueVerseIndex: number;
   distance: number;
   total: number;
   hintStep: HintStep;
 }
 
 export function buildShareString(p: SharePayload): string {
-  const band = distanceEmojiBand(p.guessChapterIndex, p.trueChapterIndex);
+  const band = distanceEmojiBand(p.guessVerseIndex, p.trueVerseIndex);
   const hint = hintEmoji(p.hintStep);
+  const title =
+    p.puzzleNumber != null
+      ? `Canonmark #${p.puzzleNumber}`
+      : "Canonmark";
   return [
-    `Canonmark #${p.puzzleNumber}`,
+    title,
     `${band} ${hint}`,
-    `${p.distance} ch \u00B7 ${p.total} pts`,
+    `${p.distance} v \u00B7 ${p.total} pts`,
     APP_URL,
   ].join("\n");
+}
+
+/** Share via system sheet when available; otherwise copy to clipboard. */
+export async function shareText(text: string): Promise<"shared" | "copied"> {
+  if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+    try {
+      await navigator.share({ text });
+      return "shared";
+    } catch (err) {
+      // User cancelled the sheet — not an error worth falling back for.
+      if (err instanceof DOMException && err.name === "AbortError") {
+        throw err;
+      }
+      // Fall through to clipboard.
+    }
+  }
+  await navigator.clipboard.writeText(text);
+  return "copied";
 }

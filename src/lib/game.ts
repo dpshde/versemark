@@ -8,7 +8,11 @@ import {
   todayPuzzleNumber,
 } from "./daily";
 import { scoreRound, type HintStep, type ScoreResult } from "./scoring";
-import { formatChapterLabel, quadrantForChapter } from "./books";
+import {
+  formatVerseLabel,
+  quadrantForVerse,
+  bookChapterVerseFromIndex,
+} from "./books";
 import { buildShareString } from "./share";
 import {
   getDailyForPuzzle,
@@ -28,7 +32,7 @@ export interface RoundData {
   paragraph: { start: number; end: number; verses: { v: number; t: string }[] } | null;
   hintStep: HintStep;
   phase: "playing" | "revealed";
-  guessChapterIndex: number | null;
+  guessVerseIndex: number | null;
   result: ScoreResult | null;
 }
 
@@ -38,6 +42,10 @@ export interface TextBundle {
     string,
     { start: number; end: number; verses: { v: number; t: string }[] }
   >;
+}
+
+function trueVerseIndex(item: PoolItem): number {
+  return item.verseIndex;
 }
 
 export function startDailyRound(
@@ -61,12 +69,16 @@ export function startDailyRound(
       paragraph,
       hintStep: existing.hintStep as HintStep,
       phase: "revealed",
-      guessChapterIndex: existing.guessChapterIndex,
+      guessVerseIndex: existing.guessVerseIndex,
       result: {
         distance: existing.distance,
-        distancePts: Math.round(existing.total / (existing.hintStep === 1 ? 3 : existing.hintStep === 2 ? 2 : 1)),
+        distancePts: Math.round(
+          existing.total /
+            (existing.hintStep === 1 ? 3 : existing.hintStep === 2 ? 2 : 1)
+        ),
         hintStep: existing.hintStep as HintStep,
-        multiplier: existing.hintStep === 1 ? 3 : existing.hintStep === 2 ? 2 : 1,
+        multiplier:
+          existing.hintStep === 1 ? 3 : existing.hintStep === 2 ? 2 : 1,
         total: existing.total,
       },
     };
@@ -80,7 +92,7 @@ export function startDailyRound(
     paragraph,
     hintStep: 1,
     phase: "playing",
-    guessChapterIndex: null,
+    guessVerseIndex: null,
     result: null,
   };
 }
@@ -99,7 +111,7 @@ export function startEndlessRound(
     paragraph: texts.paragraphs[verseKey] ?? null,
     hintStep: 1,
     phase: "playing",
-    guessChapterIndex: null,
+    guessVerseIndex: null,
     result: null,
   };
 }
@@ -112,21 +124,18 @@ export function takeHint(round: RoundData): RoundData {
 
 export function confirmGuess(
   round: RoundData,
-  guessChapterIndex: number,
+  guessVerseIndex: number,
   now: Date = new Date()
 ): { round: RoundData; appState: AppState | null } {
   if (round.phase !== "playing") {
     return { round, appState: null };
   }
-  const result = scoreRound(
-    guessChapterIndex,
-    round.poolItem.chapterIndex,
-    round.hintStep
-  );
+  const truth = trueVerseIndex(round.poolItem);
+  const result = scoreRound(guessVerseIndex, truth, round.hintStep);
   const next: RoundData = {
     ...round,
     phase: "revealed",
-    guessChapterIndex,
+    guessVerseIndex,
     result,
   };
 
@@ -136,8 +145,8 @@ export function confirmGuess(
       {
         puzzleNumber: round.puzzleNumber,
         dateKey: localDateKey(now),
-        guessChapterIndex,
-        trueChapterIndex: round.poolItem.chapterIndex,
+        guessVerseIndex,
+        trueVerseIndex: truth,
         trueRef: round.poolItem.ref,
         distance: result.distance,
         total: result.total,
@@ -155,15 +164,14 @@ export function shareForRound(round: RoundData): string | null {
   if (
     round.phase !== "revealed" ||
     !round.result ||
-    round.guessChapterIndex == null ||
-    round.puzzleNumber == null
+    round.guessVerseIndex == null
   ) {
     return null;
   }
   return buildShareString({
     puzzleNumber: round.puzzleNumber,
-    guessChapterIndex: round.guessChapterIndex,
-    trueChapterIndex: round.poolItem.chapterIndex,
+    guessVerseIndex: round.guessVerseIndex,
+    trueVerseIndex: trueVerseIndex(round.poolItem),
     distance: round.result.distance,
     total: round.result.total,
     hintStep: round.result.hintStep,
@@ -171,17 +179,20 @@ export function shareForRound(round: RoundData): string | null {
 }
 
 export function formatTrueLocation(round: RoundData): string {
-  return formatChapterLabel(round.poolItem.chapterIndex);
+  return formatVerseLabel(trueVerseIndex(round.poolItem));
 }
 
 export function formatRef(item: PoolItem): string {
-  const end =
-    item.rangeEnd > item.verse ? `–${item.rangeEnd}` : "";
-  return `${formatChapterLabel(item.chapterIndex)}:${item.verse}${end}`;
+  const loc = bookChapterVerseFromIndex(item.verseIndex);
+  if (!loc) return item.ref;
+  if (item.rangeEnd > item.verse) {
+    return `${loc.book.name} ${loc.chapter}:${item.verse}–${item.rangeEnd}`;
+  }
+  return formatVerseLabel(item.verseIndex);
 }
 
 export function hintQuadrantLabel(round: RoundData): string {
-  return quadrantForChapter(round.poolItem.chapterIndex).label;
+  return quadrantForVerse(trueVerseIndex(round.poolItem)).label;
 }
 
 export function currentAppState(): AppState {

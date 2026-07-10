@@ -3,36 +3,31 @@ import {
   distancePoints,
   hintMultiplier,
   scoreRound,
-  chapterDistance,
+  verseDistance,
+  SCORE_HALF_LIFE,
 } from "../src/lib/scoring";
 
-describe("distancePoints (ADR half-life 40)", () => {
+describe(`distancePoints (half-life ${SCORE_HALF_LIFE} verses)`, () => {
   it("d=0 → 1000", () => {
     expect(distancePoints(0)).toBe(1000);
   });
 
-  it("d=40 → 500", () => {
-    expect(distancePoints(40)).toBe(500);
+  it("d=half-life → 500", () => {
+    expect(distancePoints(SCORE_HALF_LIFE)).toBe(500);
   });
 
-  it("d=80 → 250", () => {
-    expect(distancePoints(80)).toBe(250);
+  it("d=2×half-life → 250", () => {
+    expect(distancePoints(SCORE_HALF_LIFE * 2)).toBe(250);
   });
 
-  it("d=1 → 983", () => {
-    expect(distancePoints(1)).toBe(983);
+  it("d=1 → nearly max", () => {
+    expect(distancePoints(1)).toBeGreaterThan(990);
   });
 
-  it("d=10 → 841", () => {
-    expect(distancePoints(10)).toBe(841);
-  });
-
-  it("d=150 → 74", () => {
-    expect(distancePoints(150)).toBe(74);
-  });
-
-  it("d=300 → 6", () => {
-    expect(distancePoints(300)).toBe(6);
+  it("d=250 → solid neighborhood", () => {
+    const p = distancePoints(250);
+    expect(p).toBeGreaterThan(800);
+    expect(p).toBeLessThan(900);
   });
 });
 
@@ -44,22 +39,22 @@ describe("hintMultiplier", () => {
 
 describe("scoreRound", () => {
   it("perfect ×3 = 3000", () => {
-    const r = scoreRound(500, 500, 1);
+    const r = scoreRound(5000, 5000, 1);
     expect(r.distance).toBe(0);
     expect(r.distancePts).toBe(1000);
     expect(r.multiplier).toBe(3);
     expect(r.total).toBe(3000);
   });
 
-  it("d=40 with step 2 → 500×2=1000", () => {
-    const r = scoreRound(100, 140, 2);
-    expect(r.distance).toBe(40);
+  it("d=half-life with step 2 → 500×2=1000", () => {
+    const r = scoreRound(1000, 1000 + SCORE_HALF_LIFE, 2);
+    expect(r.distance).toBe(SCORE_HALF_LIFE);
     expect(r.distancePts).toBe(500);
     expect(r.total).toBe(1000);
   });
 
-  it("chapterDistance is absolute", () => {
-    expect(chapterDistance(10, 50)).toBe(40);
-    expect(chapterDistance(50, 10)).toBe(40);
+  it("verseDistance is absolute", () => {
+    expect(verseDistance(10, 50)).toBe(40);
+    expect(verseDistance(50, 10)).toBe(40);
   });
 });

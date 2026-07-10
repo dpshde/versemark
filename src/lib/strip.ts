@@ -2,16 +2,16 @@
  * Canvas 2D canon-timeline renderer — fully procedural, no image assets.
  *
  * The canon renders as a clean timeline rail with genre-tinted book segments.
- * The 1D chapter axis maps to position along the rail (straight, no meander).
+ * The 1D verse axis maps to position along the rail (straight, no meander).
  */
 import {
   type Viewport,
   type Orientation,
   type ZoomPreset,
   bookSegments,
-  chapterToAxisPx,
-  hitTestChapter,
-  clampChapter,
+  verseToAxisPx,
+  hitTestVerse,
+  clampVerse,
   defaultViewport,
   panViewport,
   zoomViewport,
@@ -19,9 +19,9 @@ import {
   viewportFullCanon,
 } from "./axis";
 import {
-  TOTAL_CHAPTERS,
+  TOTAL_VERSES,
   TESTAMENT_SEAM_AFTER,
-  formatChapterLabel,
+  formatVerseLabel,
 } from "./books";
 
 /* ———— Constants ———— */
@@ -52,7 +52,7 @@ export interface StripState {
   viewport: Viewport;
   provisionalGuess: number | null;
   lockedGuess: number | null;
-  trueChapter: number | null;
+  trueVerse: number | null;
   revealed: boolean;
 }
 
@@ -75,8 +75,12 @@ export class CanonStrip {
   private dpr = 1;
   private dragging = false;
   private lastAxis = 0;
-  private placing = false;
+  private startAxis = 0;
+  /** pending = finger down, not yet pan vs tap; pan = scroll timeline; place unused mid-gesture */
+  private gesture: "none" | "pending" | "pan" = "none";
   private onGuessChange: ((ch: number | null) => void) | null = null;
+  /** Pixels of movement before a drag becomes a pan (vs a tap-to-place). */
+  private static readonly PAN_THRESHOLD_PX = 10;
   private ro: ResizeObserver | null = null;
   private animFrame = 0;
   private revealStart = 0;
@@ -94,7 +98,7 @@ export class CanonStrip {
       viewport: defaultViewport(orient, 300, 120),
       provisionalGuess: null,
       lockedGuess: null,
-      trueChapter: null,
+      trueVerse: null,
       revealed: false,
     };
     this.bind();
@@ -119,9 +123,9 @@ export class CanonStrip {
    * Jump to a zoom preset. Book zoom focuses the provisional guess when set,
    * otherwise the current viewport center.
    */
-  setZoomPreset(preset: ZoomPreset, focusChapter?: number): void {
+  setZoomPreset(preset: ZoomPreset, focusVerse?: number): void {
     const focus =
-      focusChapter ??
+      focusVerse ??
       this.state.provisionalGuess ??
       this.state.lockedGuess ??
       this.state.viewport.center;
@@ -143,7 +147,7 @@ export class CanonStrip {
   getProvisionalGuess(): number | null { return this.state.provisionalGuess; }
 
   setProvisionalGuess(ch: number | null): void {
-    this.state.provisionalGuess = ch == null ? null : clampChapter(ch);
+    this.state.provisionalGuess = ch == null ? null : clampVerse(ch);
     this.onGuessChange?.(this.state.provisionalGuess);
     this.render();
   }
@@ -154,12 +158,12 @@ export class CanonStrip {
     return this.state.lockedGuess;
   }
 
-  reveal(trueChapter: number): void {
-    this.state.trueChapter = clampChapter(trueChapter);
+  reveal(trueVerseIndex: number): void {
+    this.state.trueVerse = clampVerse(trueVerseIndex);
     this.state.revealed = true;
     this.centerOn(
-      this.state.lockedGuess ?? this.state.trueChapter,
-      this.state.trueChapter
+      this.state.lockedGuess ?? this.state.trueVerse,
+      this.state.trueVerse
     );
     this.startRevealAnimation();
   }
@@ -167,13 +171,13 @@ export class CanonStrip {
   resetForRound(): void {
     this.state.provisionalGuess = null;
     this.state.lockedGuess = null;
-    this.state.trueChapter = null;
+    this.state.trueVerse = null;
     this.state.revealed = false;
     this.revealProgress = 0;
     this.state.viewport = {
       ...this.state.viewport,
-      center: Math.round(TOTAL_CHAPTERS / 2),
-      span: TOTAL_CHAPTERS,
+      center: Math.round(TOTAL_VERSES / 2),
+      span: TOTAL_VERSES,
     };
     this.onGuessChange?.(null);
     this.render();
@@ -198,11 +202,11 @@ export class CanonStrip {
     const lo = Math.min(a, b);
     const hi = Math.max(a, b);
     const mid = (lo + hi) / 2;
-    const span = Math.max(60, (hi - lo) * 2.5);
+    const span = Math.max(200, (hi - lo) * 2.5);
     this.state.viewport = {
       ...this.state.viewport,
-      center: clampChapter(mid),
-      span: Math.min(TOTAL_CHAPTERS, span),
+      center: clampVerse(mid),
+      span: Math.min(TOTAL_VERSES, span),
     };
   }
 
@@ -219,14 +223,25 @@ export class CanonStrip {
         : e.clientX - rect.left;
     };
 
+    const endGesture = (): void => {
+      this.dragging = false;
+      this.gesture = "none";
+    };
+
+    /*
+     * Touch / pointer model (mobile-first):
+     * - Tap (little movement) → place / adjust marker on the verse under the finger
+     * - Drag past threshold → pan the timeline (scroll Gen↔Rev)
+     * After reveal, any drag pans; taps do nothing new.
+     */
     this.canvas.addEventListener("pointerdown", (e) => {
+      // Ignore multi-touch extras (pinch could be added later)
+      if (e.isPrimary === false) return;
       this.canvas.setPointerCapture(e.pointerId);
       this.dragging = true;
-      this.lastAxis = axisCoord(e);
-      if (!this.state.revealed) {
-        this.placing = true;
-        this.setProvisionalGuess(hitTestChapter(this.lastAxis, this.state.viewport).chapterIndex);
-      }
+      this.startAxis = axisCoord(e);
+      this.lastAxis = this.startAxis;
+      this.gesture = "pending";
     });
 
     this.canvas.addEventListener("pointermove", (e) => {
@@ -234,25 +249,58 @@ export class CanonStrip {
       const axis = axisCoord(e);
       const deltaPx = axis - this.lastAxis;
       this.lastAxis = axis;
-      if (this.placing && !this.state.revealed) {
-        this.setProvisionalGuess(hitTestChapter(axis, this.state.viewport).chapterIndex);
-        return;
+
+      if (this.gesture === "pending") {
+        if (
+          Math.abs(axis - this.startAxis) >= CanonStrip.PAN_THRESHOLD_PX
+        ) {
+          this.gesture = "pan";
+        } else {
+          return;
+        }
       }
-      const cpp = this.state.viewport.span / this.state.viewport.axisPx;
-      this.state.viewport = panViewport(this.state.viewport, -deltaPx * cpp);
-      this.render();
+
+      if (this.gesture === "pan") {
+        // Finger down → content moves with finger (natural scroll)
+        const cpp = this.state.viewport.span / this.state.viewport.axisPx;
+        this.state.viewport = panViewport(
+          this.state.viewport,
+          -deltaPx * cpp
+        );
+        this.render();
+      }
     });
 
-    this.canvas.addEventListener("pointerup", () => { this.dragging = false; this.placing = false; });
-    this.canvas.addEventListener("pointercancel", () => { this.dragging = false; this.placing = false; });
+    this.canvas.addEventListener("pointerup", (e) => {
+      if (!this.dragging) return;
+      if (
+        this.gesture === "pending" &&
+        !this.state.revealed
+      ) {
+        // Tap: place marker at the press location
+        const axis = axisCoord(e);
+        this.setProvisionalGuess(
+          hitTestVerse(axis, this.state.viewport).verseIndex
+        );
+      }
+      endGesture();
+    });
 
-    this.canvas.addEventListener("wheel", (e) => {
-      e.preventDefault();
-      const factor = e.deltaY > 0 ? 0.9 : 1.1;
-      const focus = this.state.provisionalGuess ?? this.state.viewport.center;
-      this.state.viewport = zoomViewport(this.state.viewport, factor, focus);
-      this.render();
-    }, { passive: false });
+    this.canvas.addEventListener("pointercancel", () => {
+      endGesture();
+    });
+
+    this.canvas.addEventListener(
+      "wheel",
+      (e) => {
+        e.preventDefault();
+        const factor = e.deltaY > 0 ? 0.9 : 1.1;
+        const focus = this.state.provisionalGuess ?? this.state.viewport.center;
+        this.state.viewport = zoomViewport(this.state.viewport, factor, focus);
+        this.render();
+      },
+      { passive: false }
+    );
 
     window.addEventListener("resize", () => {
       const o = this.detectOrientation();
@@ -311,10 +359,10 @@ export class CanonStrip {
     return Math.max(8, Math.min(this.state.viewport.crossPx * 0.06, 16));
   }
 
-  /** Chapter → screen position on a straight rail. */
+  /** Verse → screen position on a straight rail. */
   private railPoint(ch: number, w: number, h: number): Point {
     const vp = this.state.viewport;
-    const axis = chapterToAxisPx(ch, vp);
+    const axis = verseToAxisPx(ch, vp);
     const cross = this.railCross(w, h);
     if (vp.orientation === "horizontal") {
       return { x: axis, y: cross };
@@ -326,7 +374,7 @@ export class CanonStrip {
     const half = this.state.viewport.span / 2;
     return {
       start: Math.max(1, Math.floor(this.state.viewport.center - half) - 2),
-      end: Math.min(TOTAL_CHAPTERS, Math.ceil(this.state.viewport.center + half) + 2),
+      end: Math.min(TOTAL_VERSES, Math.ceil(this.state.viewport.center + half) + 2),
     };
   }
 
@@ -351,12 +399,12 @@ export class CanonStrip {
     this.drawBookLabels(w, h);
     this.drawEdgeLabels(w, h);
 
-    if (this.state.revealed && this.state.trueChapter != null) {
+    if (this.state.revealed && this.state.trueVerse != null) {
       if (this.state.lockedGuess != null) {
-        this.drawConnector(this.state.lockedGuess, this.state.trueChapter, w, h);
+        this.drawConnector(this.state.lockedGuess, this.state.trueVerse, w, h);
         this.drawGuessMarker(this.state.lockedGuess, w, h, false);
       }
-      this.drawTrueMarker(this.state.trueChapter, w, h);
+      this.drawTrueMarker(this.state.trueVerse, w, h);
     } else if (this.state.provisionalGuess != null) {
       this.drawGuessMarker(this.state.provisionalGuess, w, h, true);
     }
@@ -390,9 +438,9 @@ export class CanonStrip {
 
     // Genre segments
     for (const seg of bookSegments()) {
-      if (seg.endChapterIndex < range.start || seg.startChapterIndex > range.end) continue;
-      const from = Math.max(seg.startChapterIndex, range.start);
-      const to = Math.min(seg.endChapterIndex, range.end);
+      if (seg.endVerseIndex < range.start || seg.startVerseIndex > range.end) continue;
+      const from = Math.max(seg.startVerseIndex, range.start);
+      const to = Math.min(seg.endVerseIndex, range.end);
       const fromPx = this.railPoint(from, w, h);
       const toPx = this.railPoint(to + 1, w, h);
       const len = isH ? toPx.x - fromPx.x : toPx.y - fromPx.y;
@@ -407,12 +455,13 @@ export class CanonStrip {
       }
     }
 
-    // Chapter ticks at deep zoom
-    const zoom = TOTAL_CHAPTERS / vp.span;
-    if (vp.span < 60) {
+    // Verse ticks at deep zoom
+    const zoom = TOTAL_VERSES / vp.span;
+    // Show ticks when zoomed in to a handful of chapters (~150 verses)
+    if (vp.span < 150) {
       ctx.strokeStyle = INK_3;
       ctx.lineWidth = 0.5;
-      const stride = zoom < 1.4 ? 3 : zoom < 2.5 ? 2 : 1;
+      const stride = zoom < 1.4 ? 5 : zoom < 2.5 ? 2 : 1;
       for (let c = range.start; c <= range.end; c += stride) {
         const p = this.railPoint(c, w, h);
         ctx.beginPath();
@@ -482,11 +531,11 @@ export class CanonStrip {
     setLetterSpacing(ctx, "0.5px");
     ctx.textBaseline = "middle";
     for (const seg of bookSegments()) {
-      if (seg.endChapterIndex < range.start || seg.startChapterIndex > range.end) continue;
-      const lenPx = this.chPx(seg.startChapterIndex, seg.endChapterIndex + 1);
+      if (seg.endVerseIndex < range.start || seg.startVerseIndex > range.end) continue;
+      const lenPx = this.chPx(seg.startVerseIndex, seg.endVerseIndex + 1);
       if (lenPx < 28) continue;
       const alpha = Math.min(0.7, 0.3 + (lenPx - 28) / 200);
-      const mid = (seg.startChapterIndex + seg.endChapterIndex) / 2;
+      const mid = (seg.startVerseIndex + seg.endVerseIndex) / 2;
       const p = this.railPoint(mid, w, h);
       ctx.fillStyle = `rgba(110, 101, 90, ${alpha})`;
       ctx.save();
@@ -547,7 +596,7 @@ export class CanonStrip {
     diamond(ctx, p.x, p.y, 6);
     ctx.fill();
 
-    if (withLabel) this.drawMarkerLabel(formatChapterLabel(ch), p, w, h, ACCENT_DEEP);
+    if (withLabel) this.drawMarkerLabel(formatVerseLabel(ch), p, w, h, ACCENT_DEEP);
   }
 
   /* ———— 7. True marker ———— */
@@ -564,7 +613,7 @@ export class CanonStrip {
     ctx.fill();
     ctx.restore();
 
-    if (k > 0.5) this.drawMarkerLabel(formatChapterLabel(ch), p, w, h, SUCCESS);
+    if (k > 0.5) this.drawMarkerLabel(formatVerseLabel(ch), p, w, h, SUCCESS);
   }
 
   /* ———— 8. Marker label ———— */

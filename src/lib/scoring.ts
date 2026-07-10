@@ -1,21 +1,32 @@
 /**
  * Distance score × hint multiplier (ADR: score-with-distance-and-hint-multiplier).
  *
- * points = round(1000 * 0.5^(d / 40))
- * d = |guessChapterIndex - trueChapterIndex|
+ * points = round(1000 * 0.5^(d / halfLife))
+ * d = |guessVerseIndex - trueVerseIndex| on the 31,102-verse axis
+ *
+ * Half-life is 1000 verses (~38 average chapters), preserving the original
+ * 40-chapter falloff feel after the chapter→verse axis migration.
  */
 
 export type HintStep = 1 | 2 | 3;
 
-/** Half-life of 40 chapters on the 1,189-axis. */
-export const SCORE_HALF_LIFE = 40;
+/** Half-life of ~1000 verses on the 31,102-verse axis. */
+export const SCORE_HALF_LIFE = 1000;
 export const MAX_DISTANCE_POINTS = 1000;
 
-export function chapterDistance(
-  guessChapterIndex: number,
-  trueChapterIndex: number
+export function verseDistance(
+  guessVerseIndex: number,
+  trueVerseIndex: number
 ): number {
-  return Math.abs(guessChapterIndex - trueChapterIndex);
+  return Math.abs(guessVerseIndex - trueVerseIndex);
+}
+
+/** @deprecated Use verseDistance. */
+export function chapterDistance(
+  guess: number,
+  truth: number
+): number {
+  return verseDistance(guess, truth);
 }
 
 /** Distance-only points in 0..1000. */
@@ -40,11 +51,11 @@ export interface ScoreResult {
 }
 
 export function scoreRound(
-  guessChapterIndex: number,
-  trueChapterIndex: number,
+  guessVerseIndex: number,
+  trueVerseIndex: number,
   hintStep: HintStep
 ): ScoreResult {
-  const distance = chapterDistance(guessChapterIndex, trueChapterIndex);
+  const distance = verseDistance(guessVerseIndex, trueVerseIndex);
   const distancePts = distancePoints(distance);
   const multiplier = hintMultiplier(hintStep);
   return {

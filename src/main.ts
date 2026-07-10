@@ -15,9 +15,10 @@ import {
   type TextBundle,
 } from "./lib/game";
 import { CanonStrip } from "./lib/strip";
-import { formatChapterLabel } from "./lib/books";
+import { formatVerseLabel } from "./lib/books";
 import { hintMultiplier } from "./lib/scoring";
 import type { ZoomPreset } from "./lib/axis";
+import { shareText } from "./lib/share";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 
@@ -138,14 +139,14 @@ function startMode(mode: "daily" | "endless"): void {
     mode === "daily"
       ? startDailyRound(pool, texts)
       : startEndlessRound(pool, texts);
-  provisionalGuess = round.guessChapterIndex;
+  provisionalGuess = round.guessVerseIndex;
   renderPlay();
   requestAnimationFrame(() => {
     if (!strip || !round) return;
-    if (round.phase === "revealed" && round.guessChapterIndex != null) {
-      strip.setProvisionalGuess(round.guessChapterIndex);
+    if (round.phase === "revealed" && round.guessVerseIndex != null) {
+      strip.setProvisionalGuess(round.guessVerseIndex);
       strip.lockGuess();
-      strip.reveal(round.poolItem.chapterIndex);
+      strip.reveal(round.poolItem.verseIndex);
     }
   });
 }
@@ -257,7 +258,7 @@ function renderPlay(): void {
       const locked = strip?.lockGuess() ?? provisionalGuess;
       const { round: next } = confirmGuess(round, locked);
       round = next;
-      strip?.reveal(round.poolItem.chapterIndex);
+      strip?.reveal(round.poolItem.verseIndex);
       renderPlay();
     });
 
@@ -275,7 +276,7 @@ function renderPlay(): void {
       ]),
       el("p", {
         class: "score-meta",
-        text: `Off by ${r.distance} · ×${r.multiplier} · ${r.distancePts} base`,
+        text: `Off by ${r.distance} v · ×${r.multiplier} · ${r.distancePts} base`,
       }),
       el("p", { class: "true-loc" }, [
         el("span", {
@@ -286,33 +287,40 @@ function renderPlay(): void {
       ])
     );
 
-    if (round.mode === "daily") {
-      const share = shareForRound(round);
-      if (share) {
-        const copy = el("button", {
-          class: "btn-secondary btn-full",
-          type: "button",
-          id: "btn-share",
-          text: "Copy result",
-        });
-        copy.addEventListener("click", async () => {
-          try {
-            await navigator.clipboard.writeText(share);
-            copy.textContent = "Copied";
-          } catch {
-            // Fallback: surface the text for manual copy
-            let box = document.querySelector("#share-box") as HTMLElement | null;
-            if (!box) {
-              box = el("div", { class: "share-box", id: "share-box" });
-              box.textContent = share;
-              panel.insertBefore(box, copy);
-            }
-            copy.textContent = "Select text above";
+    const shareTextBody = shareForRound(round);
+    if (shareTextBody) {
+      const shareBtn = el("button", {
+        class:
+          round.mode === "daily"
+            ? "btn-primary btn-full"
+            : "btn-secondary btn-full",
+        type: "button",
+        id: "btn-share",
+        text: "Share result",
+      });
+      shareBtn.addEventListener("click", async () => {
+        try {
+          const how = await shareText(shareTextBody);
+          shareBtn.textContent = how === "shared" ? "Shared" : "Copied";
+          window.setTimeout(() => {
+            shareBtn.textContent = "Share result";
+          }, 1600);
+        } catch (err) {
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          // Last resort: show the text for manual copy
+          let box = document.querySelector("#share-box") as HTMLElement | null;
+          if (!box) {
+            box = el("div", { class: "share-box", id: "share-box" });
+            box.textContent = shareTextBody;
+            panel.insertBefore(box, shareBtn);
           }
-        });
-        panel.append(copy);
-      }
-    } else {
+          shareBtn.textContent = "Select text above";
+        }
+      });
+      panel.append(shareBtn);
+    }
+
+    if (round.mode === "endless") {
       const again = el("button", {
         class: "btn-primary btn-full",
         type: "button",
@@ -340,10 +348,10 @@ function renderPlay(): void {
   if (provisionalGuess != null) {
     strip.setProvisionalGuess(provisionalGuess);
   }
-  if (round.phase === "revealed" && round.guessChapterIndex != null) {
-    strip.setProvisionalGuess(round.guessChapterIndex);
+  if (round.phase === "revealed" && round.guessVerseIndex != null) {
+    strip.setProvisionalGuess(round.guessVerseIndex);
     strip.lockGuess();
-    strip.reveal(round.poolItem.chapterIndex);
+    strip.reveal(round.poolItem.verseIndex);
   }
 
   /* Keep the rail centered in the free band as chrome resizes */
@@ -382,11 +390,11 @@ function syncChromeInsets(): void {
 
 function updateReadout(node: HTMLElement): void {
   if (provisionalGuess == null) {
-    node.textContent = "Tap the timeline";
+    node.textContent = "Tap to mark · drag to scroll";
     return;
   }
   const label = document.createElement("strong");
-  label.textContent = formatChapterLabel(provisionalGuess);
+  label.textContent = formatVerseLabel(provisionalGuess);
   node.replaceChildren(label);
 }
 
@@ -499,7 +507,7 @@ function makeZoomBar(): HTMLElement {
 declare global {
   interface Window {
     __canonmark?: {
-      placeGuess: (chapterIndex: number) => void;
+      placeGuess: (verseIndex: number) => void;
       confirm: () => void;
       takeHint: () => void;
       getRound: () => RoundData | null;
@@ -512,9 +520,9 @@ declare global {
 
 function installDebugApi(): void {
   window.__canonmark = {
-    placeGuess(chapterIndex: number) {
-      provisionalGuess = chapterIndex;
-      strip?.setProvisionalGuess(chapterIndex);
+    placeGuess(verseIndex: number) {
+      provisionalGuess = verseIndex;
+      strip?.setProvisionalGuess(verseIndex);
       const conf = document.querySelector<HTMLButtonElement>("#btn-confirm");
       if (conf) conf.disabled = false;
       const ro = document.querySelector("#guess-readout");

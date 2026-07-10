@@ -107,20 +107,43 @@ function resolvePath(candidates) {
   return null;
 }
 
+function loadVerseAxis() {
+  const p = path.join(srcDataDir, "verse-axis.json");
+  if (!fs.existsSync(p)) {
+    throw new Error(
+      "src/data/verse-axis.json missing — needed for verse-level axis"
+    );
+  }
+  return JSON.parse(fs.readFileSync(p, "utf8"));
+}
+
 function buildBooks() {
+  const axis = loadVerseAxis();
+  const byOsis = new Map(axis.books.map((b) => [b.osis, b]));
   let offset = 1;
   const books = BOOKS.map(([name, osis, bsb, chapters, genre], i) => {
     const startChapterIndex = offset;
     const endChapterIndex = offset + chapters - 1;
     offset = endChapterIndex + 1;
+    const v = byOsis.get(osis);
+    if (!v) throw new Error(`No verse axis for ${osis}`);
+    if (v.chapters !== chapters) {
+      throw new Error(
+        `${osis}: expected ${chapters} chapters, verse-axis has ${v.chapters}`
+      );
+    }
     return {
       index: i,
       name,
       osis,
       bsb,
       chapters,
+      verses: v.verses,
       startChapterIndex,
       endChapterIndex,
+      startVerseIndex: v.startVerseIndex,
+      endVerseIndex: v.endVerseIndex,
+      versesPerChapter: v.versesPerChapter,
       genre,
       testament: i < 39 ? "OT" : "NT",
     };
@@ -128,7 +151,7 @@ function buildBooks() {
   if (offset - 1 !== 1189) {
     throw new Error(`Expected 1189 chapters, got ${offset - 1}`);
   }
-  return books;
+  return { books, totalVerses: axis.totalVerses, otEndVerseIndex: axis.otEndVerseIndex };
 }
 
 function parseRankingRef(ref) {
@@ -206,6 +229,11 @@ function buildPool(rankingsPath, books, bsb, paraData) {
       const key = `${parsed.book}.${parsed.chapter}.${parsed.verseStart}`;
       const chapterIndex =
         bookMeta.startChapterIndex + parsed.chapter - 1;
+      const priorVerses = bookMeta.versesPerChapter
+        .slice(0, parsed.chapter - 1)
+        .reduce((a, n) => a + n, 0);
+      const verseIndex =
+        bookMeta.startVerseIndex + priorVerses + parsed.verseStart - 1;
       const weightAdd = score / Math.max(1, rank);
 
       if (!acc.has(key)) {
@@ -217,6 +245,7 @@ function buildPool(rankingsPath, books, bsb, paraData) {
           rangeEnd: parsed.verseEnd,
           rangeRaw: parsed.raw,
           chapterIndex,
+          verseIndex,
           weight: 0,
           topics: [],
         });
@@ -278,17 +307,31 @@ function buildPool(rankingsPath, books, bsb, paraData) {
   }
 
   return {
-    pool: selected.map(({ ref, osis, chapter, verse, rangeEnd, rangeRaw, chapterIndex, weight, topics }) => ({
-      ref,
-      osis,
-      chapter,
-      verse,
-      rangeEnd,
-      rangeRaw,
-      chapterIndex,
-      weight,
-      topics: topics.slice(0, 4),
-    })),
+    pool: selected.map(
+      ({
+        ref,
+        osis,
+        chapter,
+        verse,
+        rangeEnd,
+        rangeRaw,
+        chapterIndex,
+        verseIndex,
+        weight,
+        topics,
+      }) => ({
+        ref,
+        osis,
+        chapter,
+        verse,
+        rangeEnd,
+        rangeRaw,
+        chapterIndex,
+        verseIndex,
+        weight,
+        topics: topics.slice(0, 4),
+      })
+    ),
     verses,
     paragraphs,
   };
@@ -324,7 +367,7 @@ function main() {
   fs.mkdirSync(outDir, { recursive: true });
   fs.mkdirSync(srcDataDir, { recursive: true });
 
-  const books = buildBooks();
+  const { books, totalVerses, otEndVerseIndex } = buildBooks();
   const bsb = loadBsb(bsbPath);
   const paraData = loadPara(paraPath);
   const { pool, verses, paragraphs } = buildPool(
@@ -334,9 +377,14 @@ function main() {
     paraData
   );
 
-  const booksJson = { totalChapters: 1189, books };
+  const booksJson = {
+    totalChapters: 1189,
+    totalVerses,
+    otEndVerseIndex,
+    books,
+  };
   const poolJson = {
-    version: 1,
+    version: 2,
     generated: new Date().toISOString().slice(0, 10),
     count: pool.length,
     items: pool,
@@ -364,7 +412,7 @@ function main() {
   );
 
   console.log(
-    `Wrote ${books.length} books, pool ${pool.length}, verses ${Object.keys(verses).length}, paragraphs ${Object.keys(paragraphs).length}`
+    `Wrote ${books.length} books (${totalVerses} verses), pool ${pool.length}, verses ${Object.keys(verses).length}, paragraphs ${Object.keys(paragraphs).length}`
   );
   console.log("Out:", outDir);
 }

@@ -17,7 +17,10 @@ export interface PoolItem {
   verse: number;
   rangeEnd: number;
   rangeRaw: string;
+  /** Global chapter index (1..1189) — layout / legacy. */
   chapterIndex: number;
+  /** Global verse index (1..TOTAL_VERSES) — selection & scoring. */
+  verseIndex: number;
   weight: number;
   topics: string[];
 }
