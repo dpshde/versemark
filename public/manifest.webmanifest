@@ -1,6 +1,6 @@
 {
-  "name": "Canonmark",
-  "short_name": "Canonmark",
+  "name": "Versemark",
+  "short_name": "Versemark",
   "description": "Mark where the verse lives in Scripture.",
   "start_url": "./",
   "display": "standalone",

@@ -3,7 +3,9 @@ import type { PoolItem } from "./lib/daily";
 import type { PoolFile } from "./lib/daily";
 import {
   startDailyRound,
+  startDailyRoundForPuzzle,
   startEndlessRound,
+  advanceDailyRound,
   takeHint,
   confirmGuess,
   shareForRound,
@@ -14,10 +16,10 @@ import {
 } from "./lib/game";
 import { CanonStrip } from "./lib/strip";
 import { formatVerseLabel } from "./lib/books";
-import { hintMultiplier } from "./lib/scoring";
-import type { ZoomPreset } from "./lib/axis";
+import { bookSegments, testamentSeamT, type ZoomPreset } from "./lib/axis";
 import { shareText } from "./lib/share";
 import { parseGuessText } from "./lib/guess-parse";
+import { hapticLight, hapticResult } from "./lib/haptics";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 
@@ -31,6 +33,9 @@ let chromeRo: ResizeObserver | null = null;
 let activeZoom: ZoomPreset | null = null;
 /** True while the guess field has focus — don't clobber in-progress typing. */
 let guessInputFocused = false;
+/** Invalid text must never confirm a stale marker that happens to remain on the rail. */
+let guessInputInvalid = false;
+let scoreToBeat: number | null = null;
 
 async function loadData(): Promise<void> {
   const base = import.meta.env.BASE_URL || "./";
@@ -67,14 +72,44 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-function makeTimelineMark(): HTMLElement {
-  const wrap = el("div", { class: "home-mark", "aria-hidden": "true" });
-  wrap.innerHTML = `<svg viewBox="0 0 40 40" fill="none">
-    <line class="rail-line" x1="6" y1="20" x2="34" y2="20"/>
-    <circle class="marker-dot" cx="14" cy="20" r="3"/>
-    <circle class="marker-true" cx="26" cy="20" r="3"/>
-  </svg>`;
-  return wrap;
+function makeHomeTimeline(): HTMLElement {
+  const timeline = el("div", {
+    class: "home-timeline",
+    role: "img",
+    "aria-label": "The Bible from Genesis to Revelation",
+  });
+  const rail = el("div", { class: "home-timeline-rail" });
+
+  for (const segment of bookSegments()) {
+    const book = el("span", {
+      class: "home-timeline-book",
+      "data-genre": segment.genre,
+    });
+    book.style.width = `${Math.max(0, segment.t1 - segment.t0) * 100}%`;
+    rail.append(book);
+  }
+
+  const seam = el("span", { class: "home-timeline-seam" });
+  seam.style.left = `${testamentSeamT() * 100}%`;
+  rail.append(seam);
+  timeline.append(
+    rail,
+    el("div", { class: "home-timeline-ends" }, [
+      el("span", { text: "Genesis" }),
+      el("span", { text: "Revelation" }),
+    ])
+  );
+  return timeline;
+}
+
+function makeWordmark(): HTMLHeadingElement {
+  const heading = el("h1", { "aria-label": "Versemark" });
+  heading.append(
+    document.createTextNode("Versem"),
+    el("span", { class: "wordmark-pin", "aria-hidden": "true" }),
+    document.createTextNode("rk")
+  );
+  return heading;
 }
 
 function renderHome(): void {
@@ -84,12 +119,12 @@ function renderHome(): void {
   const panel = el("div", { class: "home-panel" });
 
   panel.append(
-    makeTimelineMark(),
-    el("h1", { text: "Canonmark" }),
+    makeWordmark(),
     el("p", {
       class: "tagline",
       text: "Mark where the verse lives in Scripture.",
-    })
+    }),
+    makeHomeTimeline()
   );
 
   if (state.streak > 0) {
@@ -110,7 +145,10 @@ function renderHome(): void {
           type: "button",
           text: "Daily",
         });
-        b.addEventListener("click", () => startMode("daily"));
+        b.addEventListener("click", () => {
+          hapticLight();
+          startMode("daily");
+        });
         return b;
       })(),
       (() => {
@@ -120,7 +158,10 @@ function renderHome(): void {
           type: "button",
           text: "Practice",
         });
-        b.addEventListener("click", () => startMode("endless"));
+        b.addEventListener("click", () => {
+          hapticLight();
+          startMode("endless");
+        });
         return b;
       })(),
     ])
@@ -130,15 +171,19 @@ function renderHome(): void {
   app.append(screen);
 }
 
-function startMode(mode: "daily" | "endless"): void {
+function startMode(mode: "daily" | "endless", puzzleNumber?: number): void {
+  if (mode === "daily" && puzzleNumber == null) scoreToBeat = null;
   chromeRo?.disconnect();
   chromeRo = null;
   strip?.destroy();
   strip = null;
   activeZoom = null;
+  guessInputInvalid = false;
   round =
     mode === "daily"
-      ? startDailyRound(pool, texts)
+      ? puzzleNumber == null
+        ? startDailyRound(pool, texts)
+        : startDailyRoundForPuzzle(pool, texts, puzzleNumber)
       : startEndlessRound(pool, texts);
   provisionalGuess = round.guessVerseIndex;
   renderPlay();
@@ -166,7 +211,10 @@ function renderPlay(): void {
   });
   const canvas = el("canvas", {
     id: "canon-strip",
-    "aria-label": "Canon timeline",
+    role: "slider",
+    tabindex: "0",
+    "aria-label": "Place your marker on the canon timeline",
+    "aria-describedby": "timeline-instructions",
   });
   board.append(canvas);
   screen.append(board);
@@ -178,9 +226,15 @@ function renderPlay(): void {
     class: "btn-ghost",
     type: "button",
     id: "btn-home",
-    text: "Home",
+    "aria-label": "Home",
+    title: "Home",
   });
+  back.innerHTML = `<svg class="home-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M3.75 10.5 12 3.75l8.25 6.75" />
+    <path d="M5.75 9.25v10h12.5v-10M9.5 19.25v-5.5h5v5.5" />
+  </svg>`;
   back.addEventListener("click", () => {
+    hapticLight();
     chromeRo?.disconnect();
     chromeRo = null;
     strip?.destroy();
@@ -188,19 +242,32 @@ function renderPlay(): void {
     round = null;
     renderHome();
   });
+  const dailyPosition = round.daily
+    ? `${round.daily.index + 1}/${round.daily.items.length}`
+    : null;
   const modeLabel =
-    round.mode === "daily" && round.puzzleNumber != null
-      ? `Daily #${round.puzzleNumber}`
+    round.mode === "daily"
+      ? `${scoreToBeat != null ? `Beat ${scoreToBeat} · ` : ""}${dailyPosition ?? "Daily"}`
       : "Practice";
+  const modeAria =
+    round.mode === "daily" && round.puzzleNumber != null
+      ? `Daily ${round.puzzleNumber}${round.daily ? `, verse ${round.daily.index + 1} of ${round.daily.items.length}` : ""}${scoreToBeat != null ? `, score to beat ${scoreToBeat}` : ""}`
+      : "Practice";
+  const mode = el("span", {
+    class: "mode-label",
+    text: modeLabel,
+    "aria-label": modeAria,
+    title: modeAria,
+  });
   /* Map zooms sit with nav chrome while placing — hide on result to reduce noise */
   if (round.phase === "playing") {
     top.append(
       back,
       makeZoomBar(),
-      el("span", { class: "mode-label", text: modeLabel })
+      mode
     );
   } else {
-    top.append(back, el("span", { class: "mode-label", text: modeLabel }));
+    top.append(back, mode);
   }
   hud.append(top);
 
@@ -212,7 +279,21 @@ function renderPlay(): void {
   hud.append(verseBand);
 
   /* Transparent mid — hits pass through to the board */
-  hud.append(el("div", { class: "hud-mid", "aria-hidden": "true" }));
+  const hudMid = el("div", { class: "hud-mid" });
+  hudMid.append(
+    el("p", {
+      class: "sr-only",
+      id: "timeline-instructions",
+      text: "Tap or drag to place a marker. The timeline zooms in automatically; drag across the verse notches to choose the exact verse. Arrow keys move one verse, Shift plus an arrow moves ten, and Enter confirms.",
+    }),
+    el("p", {
+      class: `timeline-cue${provisionalGuess == null ? "" : " is-hidden"}`,
+      id: "timeline-cue",
+      "aria-hidden": "true",
+      text: "Tap or drag to place your marker",
+    })
+  );
+  hud.append(hudMid);
 
   const dock = el("div", { class: "dock" });
 
@@ -221,27 +302,27 @@ function renderPlay(): void {
   if (hintPanel) dock.append(hintPanel);
 
   if (round.phase === "playing") {
-    dock.append(makeGuessInput());
+    const guessTools = el("div", { class: "guess-tools" });
+    guessTools.append(makePrecisionZoomOut(), makeGuessInput());
+    dock.append(guessTools);
 
     const actions = el("div", { class: "actions" });
     const hintBtn = el("button", {
       class: "btn-secondary",
       type: "button",
       id: "btn-hint",
-      text:
-        round.hintStep >= 3
-          ? `×${hintMultiplier(round.hintStep)}`
-          : `Hint · ×${hintMultiplier(round.hintStep)}`,
+      text: "Hint",
     });
     if (round.hintStep >= 3) hintBtn.disabled = true;
     hintBtn.setAttribute(
       "aria-label",
       round.hintStep >= 3
-        ? `All hints used, multiplier ×${hintMultiplier(round.hintStep)}`
-        : `Take a hint, current multiplier ×${hintMultiplier(round.hintStep)}`
+        ? "All hints used"
+        : "Take a hint"
     );
     hintBtn.addEventListener("click", () => {
       if (!round || round.hintStep >= 3) return;
+      hapticLight();
       round = takeHint(round);
       renderPlay();
     });
@@ -252,7 +333,7 @@ function renderPlay(): void {
       id: "btn-confirm",
       text: "Confirm",
     });
-    confirm.disabled = provisionalGuess == null;
+    confirm.disabled = provisionalGuess == null || guessInputInvalid;
     confirm.addEventListener("click", () => {
       if (!round || provisionalGuess == null) return;
       // Prefer whatever is currently typed if it parses
@@ -268,6 +349,7 @@ function renderPlay(): void {
       const locked = strip?.lockGuess() ?? provisionalGuess;
       const { round: next } = confirmGuess(round, locked);
       round = next;
+      hapticResult(locked === round.poolItem.verseIndex);
       strip?.reveal(round.poolItem.verseIndex);
       renderPlay();
     });
@@ -287,8 +369,20 @@ function renderPlay(): void {
   strip = new CanonStrip(canvas);
   strip.setOnGuessChange((ch) => {
     provisionalGuess = ch;
+    guessInputInvalid = false;
     syncConfirmEnabled();
     syncGuessInputFromMarker();
+    syncTimelineCue();
+    const zoomBar = document.querySelector<HTMLElement>(".zoom-bar");
+    if (zoomBar) syncZoomBarUI(zoomBar);
+  });
+  strip.setOnGuessCommit(() => {
+    document.querySelector<HTMLButtonElement>("#btn-confirm")?.click();
+  });
+  strip.setOnFreeViewChange(() => {
+    activeZoom = null;
+    const zoomBar = document.querySelector<HTMLElement>(".zoom-bar");
+    if (zoomBar) syncZoomBarUI(zoomBar);
   });
   if (provisionalGuess != null) {
     strip.setProvisionalGuess(provisionalGuess);
@@ -327,16 +421,28 @@ function syncChromeInsets(): void {
   /* Extra room so marker labels (~24px) clear the chrome gradients */
   const topGap = 16;
   const bottomGap = 16;
+  const topInset = Math.max(0, topEdge - br.top + topGap);
+  const bottomInset = Math.max(0, br.bottom - bottomEdge + bottomGap);
   strip.setChromeInsets({
-    top: Math.max(0, topEdge - br.top + topGap),
-    bottom: Math.max(0, br.bottom - bottomEdge + bottomGap),
+    top: topInset,
+    bottom: bottomInset,
     start: 0,
     end: 0,
   });
+  const railCross = topInset + Math.max(48, br.height - topInset - bottomInset) * 0.5;
+  document
+    .querySelector<HTMLElement>(".hud")
+    ?.style.setProperty("--rail-cross", `${railCross}px`);
 }
 
 function makeGuessInput(): HTMLElement {
   const wrap = el("div", { class: "guess-field", id: "guess-readout" });
+  const error = el("p", {
+    class: "guess-error",
+    id: "guess-error",
+    "aria-live": "polite",
+    text: "Try a reference like John 3:16.",
+  });
   const input = el("input", {
     class: "guess-input",
     id: "guess-input",
@@ -348,10 +454,11 @@ function makeGuessInput(): HTMLElement {
     spellcheck: "false",
     enterkeyhint: "done",
     "aria-label": "Your guess — type a Bible reference or tap the timeline",
+    "aria-errormessage": "guess-error",
     placeholder: "Type a reference or tap the timeline",
   }) as HTMLInputElement;
-
   if (provisionalGuess != null) {
+    guessInputInvalid = false;
     input.value = formatVerseLabel(provisionalGuess);
     wrap.classList.add("is-valid");
   }
@@ -359,6 +466,9 @@ function makeGuessInput(): HTMLElement {
   const setValidity = (state: "empty" | "valid" | "invalid"): void => {
     wrap.classList.toggle("is-valid", state === "valid");
     wrap.classList.toggle("is-invalid", state === "invalid");
+    guessInputInvalid = state === "invalid";
+    input.setAttribute("aria-invalid", state === "invalid" ? "true" : "false");
+    error.hidden = state !== "invalid";
   };
 
   const applyFromInput = (commitLabel: boolean): void => {
@@ -405,20 +515,26 @@ function makeGuessInput(): HTMLElement {
     if (e.key === "Enter") {
       e.preventDefault();
       applyFromInput(true);
-      if (provisionalGuess != null) {
+      if (provisionalGuess != null && !guessInputInvalid) {
         input.blur();
         document.querySelector<HTMLButtonElement>("#btn-confirm")?.focus();
       }
     }
   });
 
-  wrap.append(input);
+  error.hidden = true;
+  wrap.append(input, error);
   return wrap;
 }
 
 function syncConfirmEnabled(): void {
   const conf = document.querySelector<HTMLButtonElement>("#btn-confirm");
-  if (conf) conf.disabled = provisionalGuess == null;
+  if (conf) conf.disabled = provisionalGuess == null || guessInputInvalid;
+}
+
+function syncTimelineCue(): void {
+  const cue = document.querySelector("#timeline-cue");
+  cue?.classList.toggle("is-hidden", provisionalGuess != null);
 }
 
 /** Push marker placement into the text field (unless the user is typing). */
@@ -430,11 +546,24 @@ function syncGuessInputFromMarker(): void {
   if (provisionalGuess == null) {
     input.value = "";
     wrap.classList.remove("is-valid", "is-invalid");
+    input.setAttribute("aria-invalid", "false");
+    const error = document.querySelector<HTMLElement>("#guess-error");
+    if (error) error.hidden = true;
     return;
   }
   input.value = formatVerseLabel(provisionalGuess);
+  input.setAttribute("aria-invalid", "false");
   wrap.classList.add("is-valid");
   wrap.classList.remove("is-invalid");
+  const error = document.querySelector<HTMLElement>("#guess-error");
+  if (error) error.hidden = true;
+}
+
+function continueDailyRound(current: RoundData): void {
+  round = advanceDailyRound(current, texts);
+  provisionalGuess = null;
+  activeZoom = null;
+  renderPlay();
 }
 
 /**
@@ -444,6 +573,12 @@ function syncGuessInputFromMarker(): void {
 function makeResultPanel(round: RoundData): HTMLElement {
   const r = round.result!;
   const panel = el("div", { class: "result-panel", id: "result-card" });
+  const dailyComplete =
+    round.daily != null &&
+    round.daily.results.length === round.daily.items.length;
+  const displayTotal = dailyComplete
+    ? round.daily!.results.reduce((sum, item) => sum + item.total, 0)
+    : r.total;
 
   const distLabel =
     r.distance === 0
@@ -454,7 +589,7 @@ function makeResultPanel(round: RoundData): HTMLElement {
 
   panel.append(
     el("p", { class: "score-line", id: "score-total" }, [
-      document.createTextNode(String(r.total)),
+      document.createTextNode(String(displayTotal)),
       el("span", { class: "pts-unit", text: "pts" }),
     ]),
     el("p", {
@@ -465,6 +600,17 @@ function makeResultPanel(round: RoundData): HTMLElement {
   );
 
   const actions = el("div", { class: "result-actions" });
+  if (dailyComplete) {
+    const summary = el("ol", { class: "daily-summary", "aria-label": "Daily verse scores" });
+    round.daily!.results.forEach((item, index) => {
+      const distance = item.distance === 0 ? "Exact" : `${item.distance} verses off`;
+      summary.append(el("li", { class: "daily-summary-row" }, [
+        el("span", { text: `${index + 1}. ${item.trueRef}` }),
+        el("span", { text: `${distance} · ${item.total} pts` }),
+      ]));
+    });
+    panel.append(summary);
+  }
   const shareTextBody = shareForRound(round);
   if (shareTextBody) {
     const shareBtn = el("button", {
@@ -477,6 +623,7 @@ function makeResultPanel(round: RoundData): HTMLElement {
     shareBtn.addEventListener("click", async () => {
       try {
         const how = await shareText(shareTextBody);
+        hapticResult(true);
         shareBtn.textContent = how === "shared" ? "Shared" : "Copied";
         window.setTimeout(() => {
           shareBtn.textContent = "Share";
@@ -502,8 +649,23 @@ function makeResultPanel(round: RoundData): HTMLElement {
       id: "btn-again",
       text: "Next",
     });
-    again.addEventListener("click", () => startMode("endless"));
+    again.addEventListener("click", () => {
+      hapticLight();
+      startMode("endless");
+    });
     actions.append(again);
+  } else if (round.daily && !dailyComplete) {
+    const nextVerse = el("button", {
+      class: "btn-primary",
+      type: "button",
+      id: "btn-next-daily",
+      text: "Next verse",
+    });
+    nextVerse.addEventListener("click", () => {
+      hapticLight();
+      continueDailyRound(round);
+    });
+    actions.append(nextVerse);
   }
 
   if (actions.childNodes.length === 1) {
@@ -573,11 +735,29 @@ function syncZoomBarUI(bar: HTMLElement): void {
     const on = activeZoom === id;
     b.classList.toggle("is-active", on);
     b.setAttribute("aria-pressed", on ? "true" : "false");
+    if (id === "book") {
+      const ready = provisionalGuess != null;
+      b.disabled = !ready;
+      b.title = ready
+        ? "Book under marker — tap again for full canon"
+        : "Place a marker to use book zoom";
+      b.setAttribute(
+        "aria-label",
+        ready
+          ? "Zoom to book under marker"
+          : "Book zoom — place a marker first"
+      );
+    }
+  });
+  const precision = strip?.isPrecisionView() ?? false;
+  document.querySelectorAll<HTMLElement>(".precision-zoom-out").forEach((node) => {
+    node.hidden = !precision;
   });
 }
 
 function applyZoomSelection(next: ZoomPreset | null): void {
-  // OT and NT are mutually exclusive; Book is exclusive with both.
+  if (next === "book" && provisionalGuess == null) return;
+  // Zoom presets are mutually exclusive.
   // Re-selecting the active preset toggles zoom completely off.
   if (next != null && activeZoom === next) {
     activeZoom = null;
@@ -609,8 +789,17 @@ function makeZoomBar(): HTMLElement {
       text: p.label,
       title: p.title,
       "aria-pressed": activeZoom === p.id ? "true" : "false",
+      "aria-label":
+        p.id === "book" && provisionalGuess == null
+          ? `${p.label} zoom — place a marker first`
+          : p.label,
     });
+    if (p.id === "book" && provisionalGuess == null) {
+      btn.disabled = true;
+      btn.title = `Place a marker to use ${p.label.toLowerCase()} zoom`;
+    }
     btn.addEventListener("click", () => {
+      hapticLight();
       applyZoomSelection(p.id);
       syncZoomBarUI(bar);
     });
@@ -619,9 +808,33 @@ function makeZoomBar(): HTMLElement {
   return bar;
 }
 
+function makePrecisionZoomOut(): HTMLButtonElement {
+  const zoomOut = el("button", {
+    class: "precision-zoom-out",
+    type: "button",
+    id: "zoom-out-precision",
+    title: "Zoom out from verse precision",
+    "aria-label": "Zoom out from verse precision",
+  });
+  zoomOut.innerHTML = `<svg class="precision-zoom-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="10.5" cy="10.5" r="6.25" />
+    <path d="M7.75 10.5h5.5M15.25 15.25 20 20" />
+  </svg>`;
+  zoomOut.hidden = true;
+  zoomOut.addEventListener("click", () => {
+    hapticLight();
+    activeZoom = null;
+    strip?.zoomOutFromPrecision();
+    const bar = document.querySelector<HTMLElement>(".zoom-bar");
+    if (bar) syncZoomBarUI(bar);
+    document.querySelector<HTMLCanvasElement>("#canon-strip")?.focus();
+  });
+  return zoomOut;
+}
+
 declare global {
   interface Window {
-    __canonmark?: {
+    __versemark?: {
       placeGuess: (verseIndex: number) => void;
       confirm: () => void;
       takeHint: () => void;
@@ -634,7 +847,7 @@ declare global {
 }
 
 function installDebugApi(): void {
-  window.__canonmark = {
+  window.__versemark = {
     placeGuess(verseIndex: number) {
       provisionalGuess = verseIndex;
       strip?.setProvisionalGuess(verseIndex);
@@ -680,7 +893,15 @@ async function main(): Promise<void> {
     return;
   }
   installDebugApi();
-  renderHome();
+  const params = new URLSearchParams(window.location.search);
+  const sharedDaily = Number(params.get("daily"));
+  const sharedBeat = Number(params.get("beat"));
+  scoreToBeat = Number.isFinite(sharedBeat) && sharedBeat > 0 ? sharedBeat : null;
+  if (Number.isInteger(sharedDaily) && sharedDaily !== 0) {
+    startMode("daily", sharedDaily);
+  } else {
+    renderHome();
+  }
 }
 
 main();

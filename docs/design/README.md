@@ -1,6 +1,6 @@
 # Design
 
-Canonmark's visual identity is a calm daily ritual: a verse on a card, a canon timeline, a marker laid down. Quiet, warm, literary, fast. No image assets — everything is CSS and Canvas.
+Versemark's visual identity is a calm daily ritual: a verse on a card, a canon timeline, a marker laid down. Quiet, warm, literary, fast. No image assets — everything is CSS and Canvas.
 
 ## Documents
 

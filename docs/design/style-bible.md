@@ -1,6 +1,6 @@
 # Style Bible
 
-**Canonmark** is a calm daily ritual, not a spectacle. A verse on a card, a timeline of the canon, a marker laid down. The design is quiet, warm, literary, and fast.
+**Versemark** is a calm daily ritual, not a spectacle. A verse on a card, a timeline of the canon, a marker laid down. The design is quiet, warm, literary, and fast.
 
 ## Thesis
 

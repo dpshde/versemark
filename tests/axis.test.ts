@@ -5,16 +5,21 @@ import {
   hitTestVerse,
   verseToAxisPx,
   clampVerse,
+  clampViewportToCanon,
   defaultViewport,
   zoomViewport,
   panViewport,
+  scrubRampMultiplier,
+  scrubVersesPerSecond,
   bookSegments,
   testamentSeamT,
   viewportForZoomPreset,
+  viewportForPrecision,
   viewportForRange,
   viewportFullCanon,
   OT_END,
   NT_START,
+  FULL_CANON_SPAN,
 } from "../src/lib/axis";
 import {
   verseIndexFor,
@@ -82,7 +87,7 @@ describe("placement math", () => {
     const mobile = defaultViewport("vertical", 400, 800);
     const desk = defaultViewport("horizontal", 1000, 200);
     expect(mobile.span).toBeLessThan(TOTAL_VERSES / 8);
-    expect(desk.span).toBe(TOTAL_VERSES);
+    expect(desk.span).toBe(FULL_CANON_SPAN);
     expect(mobile.span).toBeLessThan(desk.span);
   });
 
@@ -94,18 +99,44 @@ describe("placement math", () => {
     expect(hit.verseIndex).toBe(v);
   });
 
-  it("zoom reduces span; pan shifts center", () => {
+  it("full canon maps Genesis and Revelation to the exact rail edges", () => {
+    const vp = defaultViewport("horizontal", 1000, 200);
+    expect(verseToAxisPx(1, vp)).toBe(0);
+    expect(verseToAxisPx(TOTAL_VERSES, vp)).toBe(1000);
+    expect(hitTestVerse(0, vp).verseIndex).toBe(1);
+    expect(hitTestVerse(1000, vp).verseIndex).toBe(TOTAL_VERSES);
+  });
+
+  it("zoom reduces span without crossing canon bounds; pan shifts center", () => {
     let vp = defaultViewport("horizontal", 500, 100);
     vp = zoomViewport(vp, 2, 5000);
     expect(vp.span).toBeLessThan(TOTAL_VERSES);
-    expect(vp.center).toBe(5000);
+    expect(vp.center - vp.span / 2).toBe(1);
     const panned = panViewport(vp, 100);
-    expect(panned.center).toBe(5100);
+    expect(panned.center).toBe(vp.center + 100);
   });
 
   it("clampVerse bounds", () => {
     expect(clampVerse(0)).toBe(1);
     expect(clampVerse(999_999)).toBe(TOTAL_VERSES);
+  });
+
+  it("edge scrub accelerates through smooth fast-forward tiers", () => {
+    const holds = [0, 650, 1350, 2200, 3200, 4500];
+    const multipliers = holds.map(scrubRampMultiplier);
+    const precisionSpeeds = holds.map((hold) =>
+      scrubVersesPerSecond(80, hold)
+    );
+
+    expect(multipliers).toEqual([1, 1, 2.5, 7, 18, 80]);
+    expect(precisionSpeeds[0]).toBe(3);
+    expect(precisionSpeeds[precisionSpeeds.length - 1]).toBe(240);
+    for (let i = 2; i < precisionSpeeds.length; i += 1) {
+      expect(precisionSpeeds[i]).toBeGreaterThan(precisionSpeeds[i - 1]);
+    }
+    expect(scrubVersesPerSecond(2600, 0)).toBeGreaterThan(
+      precisionSpeeds[0]
+    );
   });
 
   it("testament seam after Malachi", () => {
@@ -151,6 +182,36 @@ describe("zoom presets", () => {
     expect(vp.span).toBeGreaterThan(loc.book.verses * 0.9);
   });
 
+  it("precision view gives a verse-resolvable neighborhood around the marker", () => {
+    const john316 = verseIndexFor("JHN", 3, 16)!;
+    const vp = viewportForPrecision(base, john316);
+    expect(vp.center).toBe(john316);
+    expect(vp.span).toBe(80);
+    expect(vp.center - vp.span / 2).toBeLessThan(john316);
+    expect(vp.center + vp.span / 2).toBeGreaterThan(john316);
+  });
+
+  it("precision view stays useful at both ends of the canon", () => {
+    const beginning = viewportForPrecision(base, 1);
+    const end = viewportForPrecision(base, TOTAL_VERSES);
+
+    expect(beginning.span).toBe(80);
+    expect(beginning.center - beginning.span / 2).toBe(1);
+    expect(end.span).toBe(80);
+    expect(end.center + end.span / 2).toBe(TOTAL_VERSES);
+    expect(panViewport(beginning, -100).center).toBe(beginning.center);
+    expect(panViewport(end, 100).center).toBe(end.center);
+  });
+
+  it("clamps arbitrary viewports inside the canon", () => {
+    const clamped = clampViewportToCanon({
+      ...base,
+      center: -500,
+      span: 80,
+    });
+    expect(clamped.center - clamped.span / 2).toBe(1);
+  });
+
   it("viewportForRange pads short books", () => {
     const obad = BOOKS.find((b) => b.osis === "OBA")!;
     const vp = viewportForRange(
@@ -166,7 +227,7 @@ describe("zoom presets", () => {
   it("full canon clears a zoomed viewport", () => {
     const zoomed = viewportForZoomPreset(base, "nt");
     const full = viewportFullCanon(zoomed);
-    expect(full.span).toBe(TOTAL_VERSES);
-    expect(full.center).toBe(Math.round(TOTAL_VERSES / 2));
+    expect(full.span).toBe(FULL_CANON_SPAN);
+    expect(full.center).toBe((TOTAL_VERSES + 1) / 2);
   });
 });

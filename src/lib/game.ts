@@ -3,7 +3,7 @@
  */
 import type { PoolItem } from "./daily";
 import {
-  selectPoolItemForPuzzle,
+  selectPoolItemsForPuzzle,
   selectEndlessItem,
   todayPuzzleNumber,
 } from "./daily";
@@ -13,7 +13,7 @@ import {
   quadrantForVerse,
   bookChapterVerseFromIndex,
 } from "./books";
-import { buildShareString } from "./share";
+import { buildDailyShareString, buildShareString } from "./share";
 import {
   getDailyForPuzzle,
   recordDailyResult,
@@ -34,6 +34,20 @@ export interface RoundData {
   phase: "playing" | "revealed";
   guessVerseIndex: number | null;
   result: ScoreResult | null;
+  daily: {
+    index: number;
+    items: PoolItem[];
+    results: DailyVerseResult[];
+  } | null;
+}
+
+export interface DailyVerseResult {
+  trueRef: string;
+  trueVerseIndex: number;
+  guessVerseIndex: number;
+  distance: number;
+  total: number;
+  hintStep: HintStep;
 }
 
 export interface TextBundle {
@@ -54,33 +68,42 @@ export function startDailyRound(
   now: Date = new Date()
 ): RoundData {
   const n = todayPuzzleNumber(now);
+  return startDailyRoundForPuzzle(pool, texts, n);
+}
+
+export function startDailyRoundForPuzzle(
+  pool: PoolItem[],
+  texts: TextBundle,
+  n: number
+): RoundData {
   const existing = getDailyForPuzzle(n);
-  const item = selectPoolItemForPuzzle(n, pool);
+  const items = selectPoolItemsForPuzzle(n, pool);
+  const saved = existing?.rounds?.length === items.length ? existing.rounds : null;
+  const index = saved ? items.length - 1 : 0;
+  const item = items[index];
   const verseKey = item.ref;
   const verseText = texts.verses[verseKey] ?? "(text unavailable)";
   const paragraph = texts.paragraphs[verseKey] ?? null;
 
-  if (existing) {
+  if (existing && saved) {
+    const last = saved[saved.length - 1];
     return {
       mode: "daily",
       puzzleNumber: n,
       poolItem: item,
       verseText,
       paragraph,
-      hintStep: existing.hintStep as HintStep,
+      hintStep: last.hintStep as HintStep,
       phase: "revealed",
-      guessVerseIndex: existing.guessVerseIndex,
+      guessVerseIndex: last.guessVerseIndex,
       result: {
-        distance: existing.distance,
-        distancePts: Math.round(
-          existing.total /
-            (existing.hintStep === 1 ? 3 : existing.hintStep === 2 ? 2 : 1)
-        ),
-        hintStep: existing.hintStep as HintStep,
-        multiplier:
-          existing.hintStep === 1 ? 3 : existing.hintStep === 2 ? 2 : 1,
-        total: existing.total,
+        distance: last.distance,
+        distancePts: Math.round(last.total / (last.hintStep === 1 ? 3 : last.hintStep === 2 ? 2 : 1)),
+        hintStep: last.hintStep as HintStep,
+        multiplier: last.hintStep === 1 ? 3 : last.hintStep === 2 ? 2 : 1,
+        total: last.total,
       },
+      daily: { index, items, results: saved as DailyVerseResult[] },
     };
   }
 
@@ -94,6 +117,7 @@ export function startDailyRound(
     phase: "playing",
     guessVerseIndex: null,
     result: null,
+    daily: { index, items, results: [] },
   };
 }
 
@@ -113,6 +137,25 @@ export function startEndlessRound(
     phase: "playing",
     guessVerseIndex: null,
     result: null,
+    daily: null,
+  };
+}
+
+export function advanceDailyRound(round: RoundData, texts: TextBundle): RoundData {
+  if (!round.daily || round.phase !== "revealed") return round;
+  const index = round.daily.index + 1;
+  if (index >= round.daily.items.length) return round;
+  const item = round.daily.items[index];
+  return {
+    ...round,
+    poolItem: item,
+    verseText: texts.verses[item.ref] ?? "(text unavailable)",
+    paragraph: texts.paragraphs[item.ref] ?? null,
+    hintStep: 1,
+    phase: "playing",
+    guessVerseIndex: null,
+    result: null,
+    daily: { ...round.daily, index },
   };
 }
 
@@ -139,8 +182,27 @@ export function confirmGuess(
     result,
   };
 
+  if (next.daily) {
+    next.daily = {
+      ...next.daily,
+      results: [...next.daily.results, {
+        trueRef: round.poolItem.ref,
+        trueVerseIndex: truth,
+        guessVerseIndex,
+        distance: result.distance,
+        total: result.total,
+        hintStep: result.hintStep,
+      }],
+    };
+  }
+
   let appState: AppState | null = null;
-  if (round.mode === "daily" && round.puzzleNumber != null) {
+  const completedDaily =
+    next.daily && next.daily.results.length === next.daily.items.length
+      ? next.daily
+      : null;
+  if (round.mode === "daily" && round.puzzleNumber != null && completedDaily) {
+    const aggregate = completedDaily.results.reduce((sum, item) => sum + item.total, 0);
     appState = recordDailyResult(
       {
         puzzleNumber: round.puzzleNumber,
@@ -149,9 +211,10 @@ export function confirmGuess(
         trueVerseIndex: truth,
         trueRef: round.poolItem.ref,
         distance: result.distance,
-        total: result.total,
+        total: aggregate,
         hintStep: result.hintStep,
         completedAt: now.toISOString(),
+        rounds: completedDaily.results,
       },
       now
     );
@@ -166,6 +229,16 @@ export function shareForRound(round: RoundData): string | null {
     !round.result ||
     round.guessVerseIndex == null
   ) {
+    return null;
+  }
+  if (round.mode === "daily") {
+    if (
+      round.puzzleNumber != null &&
+      round.daily &&
+      round.daily.results.length === round.daily.items.length
+    ) {
+      return buildDailyShareString(round.puzzleNumber, round.daily.results);
+    }
     return null;
   }
   return buildShareString({

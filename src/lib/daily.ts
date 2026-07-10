@@ -2,13 +2,14 @@
  * Daily puzzle selection (ADR: seed-daily-puzzle-from-date-hash).
  *
  * Epoch: 2026-08-01 local = puzzle #1
- * Seed: "eachstar#" + N → xmur3 → mulberry32
+ * Seed: "versemark#" + N → xmur3 → mulberry32
  * Weighted sample of pool with 180-puzzle no-repeat window replayed from #1.
  */
 import { rngForPuzzle } from "./prng";
 
 export const DAILY_EPOCH = { year: 2026, month: 8, day: 1 } as const;
 export const NO_REPEAT_WINDOW = 180;
+export const DAILY_VERSE_COUNT = 4;
 
 export interface PoolItem {
   ref: string;
@@ -22,6 +23,8 @@ export interface PoolItem {
   /** Global verse index (1..TOTAL_VERSES) — selection & scoring. */
   verseIndex: number;
   weight: number;
+  /** How many Exedra topics cite this passage (cross-ref depth). */
+  topicCount?: number;
   topics: string[];
 }
 
@@ -110,6 +113,21 @@ export function selectPoolItemForPuzzle(
     history.push(pick.ref);
   }
   return pool.find((p) => p.ref === history[history.length - 1]) ?? pool[0];
+}
+
+/** Stable four-verse set for a Daily; slot zero preserves the original pick. */
+export function selectPoolItemsForPuzzle(
+  n: number,
+  pool: PoolItem[],
+  count = DAILY_VERSE_COUNT
+): PoolItem[] {
+  if (!pool.length) throw new Error("Empty pool");
+  const picks = [selectPoolItemForPuzzle(n, pool)];
+  for (let slot = 1; slot < count; slot += 1) {
+    const exclude = new Set(picks.map((item) => item.ref));
+    picks.push(weightedPick(pool, rngForPuzzle(n * 101 + slot), exclude));
+  }
+  return picks;
 }
 
 /** Local random pick for endless mode (non-deterministic). */

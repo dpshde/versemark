@@ -1,6 +1,6 @@
 # Grok Imagine Asset Pipeline
 
-Dedicated, reproducible pipeline for generating eachstar's UI art with Grok Imagine (xAI image and video generation), per the [generate-assets-with-grok-imagine](../decisions/generate-assets-with-grok-imagine.md) ADR.
+Dedicated, reproducible pipeline for generating Versemark's UI art with Grok Imagine (xAI image and video generation), per the [generate-assets-with-grok-imagine](../decisions/generate-assets-with-grok-imagine.md) ADR.
 
 ## Principles
 

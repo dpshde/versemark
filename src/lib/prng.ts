@@ -1,6 +1,6 @@
 /**
  * Frozen daily PRNG: xmur3 → mulberry32
- * Seed string: "canonmark#" + N
+ * Seed string: "versemark#" + N
  * (ADR: seed-daily-puzzle-from-date-hash)
  */
 
@@ -31,6 +31,6 @@ export function mulberry32(a: number): () => number {
 
 /** Seeded RNG for puzzle N. */
 export function rngForPuzzle(n: number): () => number {
-  const seedFn = xmur3(`canonmark#${n}`);
+  const seedFn = xmur3(`versemark#${n}`);
   return mulberry32(seedFn());
 }

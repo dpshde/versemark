@@ -1,6 +1,6 @@
 # Name the project eachstar
 
-- Status: accepted
+- Status: superseded by [name-the-project-versemark.md](name-the-project-versemark.md)
 - Date: 2026-07-10
 
 ## Context and Problem Statement

@@ -14,7 +14,7 @@ People who want a **mental map of Scripture** — where books and chapters live 
 
 ## Product Purpose
 
-**Canonmark** is a "place the marker" Scripture familiarity game. A BSB verse appears; the player drops a pin on a continuous 1,189-chapter canon timeline and confirms. Score rewards both precision (chapter distance) and independence (how few hints). Success is not trivia recall: it is growing a spatial sense of the canon so passages feel locatable, not random.
+**Versemark** is a "place the marker" Scripture familiarity game. A BSB verse appears; the player drops a pin on a continuous 1,189-chapter canon timeline and confirms. Score rewards both precision (chapter distance) and independence (how few hints). Success is not trivia recall: it is growing a spatial sense of the canon so passages feel locatable, not random.
 
 ## Positioning
 

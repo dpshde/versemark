@@ -1,5 +1,5 @@
 ---
-name: Canonmark
+name: Versemark
 description: Mark where the verse lives — a calm canon-timeline familiarity game for spare minutes.
 colors:
   bg: "oklch(0.985 0.003 50)"
@@ -13,28 +13,29 @@ colors:
   accent-soft: "oklch(0.90 0.035 45)"
   border: "oklch(0.90 0.006 50)"
   success: "oklch(0.52 0.11 145)"
+  error: "oklch(0.43 0.12 25)"
   rail: "oklch(0.93 0.005 50)"
 typography:
   display:
-    fontFamily: "Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif"
+    fontFamily: "Charter, Bitstream Charter, Sitka Text, Cambria, Georgia, serif"
     fontSize: "clamp(1.7rem, 7vw, 2.2rem)"
     fontWeight: 600
     lineHeight: 1.2
     letterSpacing: "-0.01em"
   body:
-    fontFamily: "Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif"
+    fontFamily: "Charter, Bitstream Charter, Sitka Text, Cambria, Georgia, serif"
     fontSize: "1.04rem"
     fontWeight: 400
     lineHeight: 1.6
     letterSpacing: "normal"
   label:
-    fontFamily: "Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif"
+    fontFamily: "Charter, Bitstream Charter, Sitka Text, Cambria, Georgia, serif"
     fontSize: "0.82rem"
     fontWeight: 600
     lineHeight: 1.3
     letterSpacing: "0.06em"
   score:
-    fontFamily: "Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif"
+    fontFamily: "Charter, Bitstream Charter, Sitka Text, Cambria, Georgia, serif"
     fontSize: "1.8rem"
     fontWeight: 700
     lineHeight: 1.2
@@ -73,7 +74,7 @@ components:
     padding: "0"
 ---
 
-# Canonmark — Design System
+# Versemark — Design System
 
 ## Overview
 
@@ -88,13 +89,14 @@ A quiet daily ritual: a verse, a timeline of the canon, a marker laid down. The 
 - **Ink-2 / Ink-3**: secondary and tertiary text, same warm hue.
 - **Accent** (`oklch(0.55 0.15 40)`): terracotta. Used for the player's marker, primary buttons, active states, and key actions only.
 - **Success** (`oklch(0.52 0.11 145)`): muted olive-green for the true position marker on reveal.
+- **Error** (`oklch(0.43 0.12 25)`): deep brick for invalid references and recovery copy.
 - **Border** (`oklch(0.90 0.006 50)`): subtle warm borders on cards and inputs.
 
 Genre tints on timeline segments are whisper-level — barely perceptible warm/cool shifts, never cartoon blocks.
 
 ## Typography
 
-Book serif throughout (Iowan Old Style / Palatino / Georgia stack). Display is tight and weighty, not spaced-out. Labels use small-caps with modest tracking. Body at 1.04rem with comfortable line-height. Score is large and confident.
+Book serif throughout (Charter / Bitstream Charter / Sitka Text / Cambria stack). Display is tight and weighty, not spaced-out. Labels use small-caps with modest tracking. Body at 1.04rem with comfortable line-height. Score is large and confident.
 
 ## Elevation
 
@@ -109,6 +111,10 @@ Minimal. Cards use a hairline border and a very subtle shadow (4px blur max). No
 - **Result**: flat score + one meta line + true location; no chip grid, no nested surfaces.
 - **Mode label**: plain small-caps text, no pill.
 - **Canon timeline**: full-width canvas rail with subtle genre-tinted book segments; marker is a filled diamond on the rail; reveal draws a thin connector to the true position.
+- **Precision interaction**: a broad placement automatically transitions into an 80-verse local view; a separate ruler beside the rail shows one notch per verse, with the active notch longest and darkest. The current reference is unboxed and sits opposite the notch ruler—above the horizontal rail or left of the vertical rail.
+- **Edge scrubbing**: holding a marker in the timeline's edge zone starts slowly, then accelerates through fast-forward tiers; leaving the edge or reversing direction resets the ramp.
+- **Canon bounds**: Genesis 1:1 and Revelation 22:21 are the literal first and last rail positions; zooming and panning never expose blank space beyond them.
+- **Chapter context**: verse precision labels complete chapters prominently across their visible span; clipped chapters remain represented by stronger range-edge labels.
 
 ## Do's and Don'ts
 

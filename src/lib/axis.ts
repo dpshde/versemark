@@ -39,6 +39,9 @@ export interface HitResult {
   t: number;
 }
 
+/** Distance in verse-index units between Genesis 1:1 and Revelation 22:21. */
+export const FULL_CANON_SPAN = TOTAL_VERSES - 1;
+
 /** Clamp verse index to valid range. */
 export function clampVerse(index: number): number {
   return Math.min(TOTAL_VERSES, Math.max(1, Math.round(index)));
@@ -153,6 +156,20 @@ export function testamentSeamT(): number {
   return verseToT(TESTAMENT_SEAM_AFTER);
 }
 
+/** Keep a viewport entirely inside the canon, with no blank endpoint padding. */
+export function clampViewportToCanon(viewport: Viewport): Viewport {
+  const span = Math.min(FULL_CANON_SPAN, Math.max(1, viewport.span));
+  const half = span / 2;
+  return {
+    ...viewport,
+    span,
+    center: Math.min(
+      TOTAL_VERSES - half,
+      Math.max(1 + half, viewport.center)
+    ),
+  };
+}
+
 /** Zoom: smaller span = zoomed in. */
 export function zoomViewport(
   viewport: Viewport,
@@ -160,25 +177,58 @@ export function zoomViewport(
   focusVerse?: number
 ): Viewport {
   const focus = focusVerse ?? viewport.center;
-  const nextSpan = Math.min(
-    TOTAL_VERSES * 1.05,
-    Math.max(20, viewport.span / factor)
-  );
-  return {
+  const nextSpan = Math.min(FULL_CANON_SPAN, Math.max(20, viewport.span / factor));
+  return clampViewportToCanon({
     ...viewport,
     span: nextSpan,
-    center: clampVerse(focus),
-  };
+    center: focus,
+  });
 }
 
 export function panViewport(
   viewport: Viewport,
   deltaVerses: number
 ): Viewport {
-  return {
+  return clampViewportToCanon({
     ...viewport,
-    center: clampVerse(viewport.center + deltaVerses),
-  };
+    center: viewport.center + deltaVerses,
+  });
+}
+
+const SCRUB_RAMP_POINTS = [
+  { holdMs: 0, multiplier: 1 },
+  { holdMs: 650, multiplier: 1 },
+  { holdMs: 1350, multiplier: 2.5 },
+  { holdMs: 2200, multiplier: 7 },
+  { holdMs: 3200, multiplier: 18 },
+  { holdMs: 4500, multiplier: 80 },
+] as const;
+
+/** Smooth, staged acceleration for a held edge-scrub gesture. */
+export function scrubRampMultiplier(holdMs: number): number {
+  const elapsed = Math.max(0, holdMs);
+  for (let i = 1; i < SCRUB_RAMP_POINTS.length; i += 1) {
+    const previous = SCRUB_RAMP_POINTS[i - 1];
+    const next = SCRUB_RAMP_POINTS[i];
+    if (elapsed > next.holdMs) continue;
+    const duration = next.holdMs - previous.holdMs;
+    if (duration <= 0) return next.multiplier;
+    const raw = (elapsed - previous.holdMs) / duration;
+    const t = Math.min(1, Math.max(0, raw));
+    const eased = t * t * (3 - 2 * t);
+    return previous.multiplier +
+      (next.multiplier - previous.multiplier) * eased;
+  }
+  return SCRUB_RAMP_POINTS[SCRUB_RAMP_POINTS.length - 1].multiplier;
+}
+
+/** Verse velocity for edge scrubbing at the current zoom scale. */
+export function scrubVersesPerSecond(span: number, holdMs: number): number {
+  const safeSpan = Math.max(1, span);
+  const precision = safeSpan <= 120;
+  const base = precision ? 3 : Math.max(20, safeSpan * 0.04);
+  const cap = precision ? 240 : Math.max(200, safeSpan * 1.25);
+  return Math.min(cap, base * scrubRampMultiplier(holdMs));
 }
 
 /**
@@ -188,7 +238,7 @@ export function panViewport(
 export const DEFAULT_MOBILE_SPAN = Math.round(TOTAL_VERSES / 12);
 
 export function defaultSpanForOrientation(orientation: Orientation): number {
-  return orientation === "vertical" ? DEFAULT_MOBILE_SPAN : TOTAL_VERSES;
+  return orientation === "vertical" ? DEFAULT_MOBILE_SPAN : FULL_CANON_SPAN;
 }
 
 export function defaultViewport(
@@ -196,22 +246,22 @@ export function defaultViewport(
   axisPx: number,
   crossPx: number
 ): Viewport {
-  return {
-    center: Math.round(TOTAL_VERSES / 2),
+  return clampViewportToCanon({
+    center: (TOTAL_VERSES + 1) / 2,
     span: defaultSpanForOrientation(orientation),
     orientation,
     axisPx,
     crossPx,
-  };
+  });
 }
 
 /** Full canon overview (zoom off). */
 export function viewportFullCanon(viewport: Viewport): Viewport {
-  return {
+  return clampViewportToCanon({
     ...viewport,
-    center: Math.round(TOTAL_VERSES / 2),
-    span: TOTAL_VERSES,
-  };
+    center: (TOTAL_VERSES + 1) / 2,
+    span: FULL_CANON_SPAN,
+  });
 }
 
 /**
@@ -230,15 +280,15 @@ export function viewportForRange(
   const hi = clampVerse(Math.max(startVerse, endVerse));
   const width = hi - lo + 1;
   const span = Math.min(
-    TOTAL_VERSES * 1.05,
+    FULL_CANON_SPAN,
     Math.max(minSpan, width * pad)
   );
   const mid = (lo + hi) / 2;
-  return {
+  return clampViewportToCanon({
     ...viewport,
-    center: clampVerse(mid),
+    center: mid,
     span,
-  };
+  });
 }
 
 /**
@@ -275,4 +325,16 @@ export function viewportForZoomPreset(
     book.endVerseIndex,
     { pad: 1.15, minSpan: 80 }
   );
+}
+
+/** Verse-resolvable local view used after the player's broad placement. */
+export function viewportForPrecision(
+  viewport: Viewport,
+  focusVerse: number
+): Viewport {
+  const focus = clampVerse(focusVerse);
+  return viewportForRange(viewport, focus - 30, focus + 30, {
+    pad: 1.1,
+    minSpan: 80,
+  });
 }

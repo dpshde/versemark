@@ -2,7 +2,7 @@
  * localStorage persistence for daily results / streak / history.
  */
 
-const KEY = "canonmark:v2";
+const KEY = "versemark:v2";
 
 export interface DailyResultRecord {
   puzzleNumber: number;
@@ -14,6 +14,14 @@ export interface DailyResultRecord {
   total: number;
   hintStep: number;
   completedAt: string;
+  rounds?: Array<{
+    trueRef: string;
+    trueVerseIndex: number;
+    guessVerseIndex: number;
+    distance: number;
+    total: number;
+    hintStep: number;
+  }>;
 }
 
 export interface AppState {

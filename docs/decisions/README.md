@@ -1,6 +1,6 @@
 # Decisions
 
-Architecture decision records (ADRs) for Each Star (`eachstar`).
+Architecture decision records (ADRs) for Versemark (`versemark`).
 
 ## Conventions
 
@@ -24,4 +24,5 @@ Architecture decision records (ADRs) for Each Star (`eachstar`).
 | [distribute-as-static-site-pwa-and-itch.md](distribute-as-static-site-pwa-and-itch.md) | accepted |
 | [generate-assets-with-grok-imagine.md](generate-assets-with-grok-imagine.md) | accepted |
 | [design-mobile-first.md](design-mobile-first.md) | accepted |
-| [name-the-project-eachstar.md](name-the-project-eachstar.md) | accepted |
+| [name-the-project-eachstar.md](name-the-project-eachstar.md) | superseded by name-the-project-versemark |
+| [name-the-project-versemark.md](name-the-project-versemark.md) | accepted |

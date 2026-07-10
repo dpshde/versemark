@@ -5,10 +5,11 @@ import {
   takeHint,
   confirmGuess,
   shareForRound,
+  advanceDailyRound,
   type TextBundle,
 } from "../src/lib/game";
 import type { PoolItem } from "../src/lib/daily";
-import { selectPoolItemForPuzzle, puzzleNumberFromDateString } from "../src/lib/daily";
+import { selectPoolItemForPuzzle, selectPoolItemsForPuzzle, puzzleNumberFromDateString } from "../src/lib/daily";
 import { scoreRound } from "../src/lib/scoring";
 import poolData from "../src/data/pool.json";
 
@@ -53,8 +54,14 @@ describe("full round flow", () => {
     const fixed = new Date(2026, 7, 15); // local Aug 15 2026 → puzzle #15
     const n = puzzleNumberFromDateString("2026-08-15");
     expect(n).toBe(15);
-    const item = selectPoolItemForPuzzle(n, pool);
-    const texts = textsFor(item);
+    const items = selectPoolItemsForPuzzle(n, pool);
+    const texts: TextBundle = { verses: {}, paragraphs: {} };
+    for (const selected of items) {
+      const bundle = textsFor(selected);
+      Object.assign(texts.verses, bundle.verses);
+      Object.assign(texts.paragraphs, bundle.paragraphs);
+    }
+    const item = items[0];
     let round = startDailyRound(pool, texts, fixed);
     expect(round.phase).toBe("playing");
     expect(round.verseText).toContain(item.ref);
@@ -74,9 +81,18 @@ describe("full round flow", () => {
     expect(done.result!.distance).toBe(1000);
     expect(done.result!.distancePts).toBe(500);
 
-    const share = shareForRound(done);
-    expect(share).toContain(`Canonmark #${n}`);
-    expect(share).toContain("1000 v");
+    let final = done;
+    for (let index = 1; index < 4; index += 1) {
+      final = advanceDailyRound(final, texts);
+      final = confirmGuess(final, final.poolItem.verseIndex, fixed).round;
+    }
+    const share = shareForRound(final);
+    expect(share).not.toBeNull();
+    // Wordle-class: "Versemark {N} {total}" then blank line then 4 emoji rows
+    expect(share!.startsWith(`Versemark ${n} `)).toBe(true);
+    expect(share!.split("\n\n")[1].split("\n")).toHaveLength(4);
+    expect(share).not.toContain("http");
+    expect(share).not.toContain("Score to beat");
   });
 
   it("endless produces a playable round from pool", () => {
