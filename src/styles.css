@@ -464,9 +464,11 @@ button:disabled {
 .timeline-cue {
   position: absolute;
   top: 50%;
-  /* Portrait: rail hugs left; cue sits in the open label column to its right */
-  left: 3.25rem;
-  width: 8.5rem;
+  /* Portrait: rail + labels hug left; cue lives in the open right field */
+  left: 52%;
+  right: 2.75rem;
+  width: auto;
+  max-width: 11rem;
   margin: 0;
   transform: translateY(-50%);
   color: var(--ink-2);
