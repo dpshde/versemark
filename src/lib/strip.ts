@@ -57,6 +57,10 @@ const PRECISION_ZOOM_MS = 220;
 const PRECISION_THRESHOLD = 180;
 const NOTCH_GAP = 8;
 const ACTIVE_NOTCH_LENGTH = 28;
+/** Shared gap from the portrait rail edge to the label column. */
+const PORTRAIT_LABEL_GAP = 8;
+/** Minimum vertical gap between portrait overview labels. */
+const PORTRAIT_LABEL_MIN_GAP = 13;
 
 /** Genre segment tints — soft but readable warm/cool bands along the rail. */
 const GENRE_TINT: Record<string, string> = {
@@ -824,6 +828,27 @@ export class CanonStrip {
     return Math.max(8, Math.min(this.state.viewport.crossPx * 0.06, 16));
   }
 
+  /**
+   * Shared x for portrait overview labels (books, edges, live selection).
+   * Keeps every name in one column to the right of the left-hugged rail.
+   */
+  private portraitLabelX(w: number, h: number): number {
+    const cross = this.railCross(w, h);
+    return cross + this.railThick() / 2 + PORTRAIT_LABEL_GAP;
+  }
+
+  /** Precision / notch column — past the verse ruler. */
+  private portraitNotchLabelX(w: number, h: number): number {
+    const cross = this.railCross(w, h);
+    return (
+      cross +
+      this.railThick() / 2 +
+      NOTCH_GAP +
+      ACTIVE_NOTCH_LENGTH +
+      10
+    );
+  }
+
   /** Verse → screen position on a straight rail (inside the free band). */
   private railPoint(ch: number, w: number, h: number): Point {
     const vp = this.state.viewport;
@@ -1131,8 +1156,7 @@ export class CanonStrip {
         ctx.fillText(label, 0, 0, available);
         ctx.restore();
       } else {
-        const x =
-          cross + thick / 2 + NOTCH_GAP + ACTIVE_NOTCH_LENGTH + 10;
+        const x = this.portraitNotchLabelX(w, h);
         ctx.textAlign = "left";
         ctx.fillText(
           label,
@@ -1257,6 +1281,12 @@ export class CanonStrip {
       rangeEnd: range.end,
     });
 
+    const labelX = this.portraitLabelX(w, h);
+    const guessY =
+      this.state.provisionalGuess != null
+        ? this.railPoint(this.state.provisionalGuess, w, h).y
+        : null;
+
     ctx.save();
     ctx.font = `9px ${SERIF}`;
     setLetterSpacing(ctx, "0.5px");
@@ -1267,6 +1297,14 @@ export class CanonStrip {
         ? Math.min(0.7, 0.3 + (seg.lenPx - 14) / 200)
         : Math.min(0.78, 0.42 + seg.lenPx / 160);
       const p = this.railPoint(seg.startVerseIndex, w, h);
+      // Leave a clear lane for the live selection label.
+      if (
+        !isH &&
+        guessY != null &&
+        Math.abs(p.y - guessY) < PORTRAIT_LABEL_MIN_GAP
+      ) {
+        continue;
+      }
       ctx.fillStyle = `rgba(110, 101, 90, ${alpha})`;
       ctx.save();
       if (isH) {
@@ -1276,14 +1314,10 @@ export class CanonStrip {
         ctx.textAlign = "left";
         ctx.fillText(seg.name.toUpperCase(), 0, 0);
       } else {
-        // Portrait/mobile: upright at book start, right of the left-hugged rail
+        // Portrait: one shared column to the right of the rail.
         ctx.textAlign = "left";
-        ctx.textBaseline = "top";
-        ctx.fillText(
-          seg.name.toUpperCase(),
-          p.x + thick / 2 + gap,
-          p.y + 1
-        );
+        ctx.textBaseline = "middle";
+        ctx.fillText(seg.name.toUpperCase(), labelX, p.y);
       }
       ctx.restore();
     }
@@ -1308,11 +1342,43 @@ export class CanonStrip {
     ctx.fillStyle = INK_3;
 
     if (state.viewport.orientation === "vertical") {
-      const labelX = Math.min(w - 8, cross + thick / 2 + 10);
+      const labelX = this.portraitLabelX(w, h);
       ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
       const range = this.visibleRange();
-      ctx.fillText(this.edgeLabel(range.start), labelX, free.origin + 14);
-      ctx.fillText(this.edgeLabel(range.end), labelX, free.origin + free.length - 10);
+      const startY = free.origin + 12;
+      const endY = free.origin + free.length - 12;
+      const guessY =
+        state.provisionalGuess != null
+          ? this.railPoint(state.provisionalGuess, w, h).y
+          : null;
+
+      // Skip an edge caption when a book anchor or the live selection already
+      // occupies that lane — stops GENESIS / GENESIS 1 / EXODUS stacking.
+      const anchors = selectBookAnchors(bookSegments(), {
+        orientation: "vertical",
+        span: state.viewport.span,
+        axisPx: state.viewport.axisPx,
+        center: state.viewport.center,
+        rangeStart: range.start,
+        rangeEnd: range.end,
+      });
+      const occupied = (y: number): boolean => {
+        if (guessY != null && Math.abs(guessY - y) < PORTRAIT_LABEL_MIN_GAP) {
+          return true;
+        }
+        return anchors.some((seg) => {
+          const py = this.railPoint(seg.startVerseIndex, w, h).y;
+          return Math.abs(py - y) < PORTRAIT_LABEL_MIN_GAP;
+        });
+      };
+
+      if (!occupied(startY)) {
+        ctx.fillText(this.edgeLabel(range.start), labelX, startY);
+      }
+      if (!occupied(endY)) {
+        ctx.fillText(this.edgeLabel(range.end), labelX, endY);
+      }
     } else {
       const labelY = Math.min(h - 12, cross + thick / 2 + 14);
       ctx.textAlign = "left";
@@ -1440,7 +1506,8 @@ export class CanonStrip {
 
   /* ———— 8. Marker label ———— */
 
-  /** Keep the live reference with the notch ruler (right of the portrait rail). */
+  /** Keep the live reference in the shared portrait label column (overview)
+   * or past the notch ruler (precision). */
   private drawSelectionLabel(
     label: string,
     p: Point,
@@ -1450,6 +1517,7 @@ export class CanonStrip {
     const isHorizontal = this.state.viewport.orientation === "horizontal";
     const offset = this.railThick() / 2 + NOTCH_GAP;
     const text = label.toUpperCase();
+    const precision = this.state.viewport.span <= PRECISION_THRESHOLD;
 
     ctx.save();
     ctx.fillStyle = ACCENT_DEEP;
@@ -1465,9 +1533,12 @@ export class CanonStrip {
       ctx.textAlign = "left";
       ctx.fillText(text, 0, 0, available);
     } else {
-      // Past the notch ruler so chapter labels and the live ref share the right.
-      const x = p.x + offset + ACTIVE_NOTCH_LENGTH + 10;
-      const available = Math.max(40, this.canvasW - x - QUICK_SCROLL_HIT - 4);
+      const w = this.canvasW;
+      const h = this.canvasH;
+      const x = precision
+        ? this.portraitNotchLabelX(w, h)
+        : this.portraitLabelX(w, h);
+      const available = Math.max(40, w - x - QUICK_SCROLL_HIT - 4);
       ctx.textAlign = "left";
       ctx.fillText(text, x, p.y, available);
     }

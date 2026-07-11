@@ -292,7 +292,7 @@ describe("selectBookAnchors", () => {
       axisPx: 280,
     });
     // Phone overview previously only kept Genesis / Psalms / Jeremiah.
-    expect(anchors.length).toBeGreaterThanOrEqual(16);
+    expect(anchors.length).toBeGreaterThanOrEqual(12);
     const osis = anchors.map((a) => a.osis);
     expect(osis).toContain("GEN");
     expect(osis).toContain("PSA");

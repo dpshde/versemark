@@ -172,7 +172,7 @@ export function selectBookAnchors(
   const isH = orientation === "horizontal";
   const minPx = isH ? 20 : 4;
   /** Portrait: tight but readable spacing for phone overview landmarks. */
-  const minGap = isH ? 0 : 9;
+  const minGap = isH ? 0 : 13;
   const safeSpan = Math.max(1, span);
   const safeAxis = Math.max(1, axisPx);
   const half = safeSpan / 2;
