@@ -18,7 +18,7 @@ import {
 } from "./lib/game";
 import { CanonStrip } from "./lib/strip";
 import { formatVerseLabel } from "./lib/books";
-import { bookSegments, testamentSeamT, type ZoomPreset } from "./lib/axis";
+import { bookSegments, testamentSeamT, FULL_CANON_SPAN, type ZoomPreset } from "./lib/axis";
 import { shareText } from "./lib/share";
 import {
   parseGuessText,
@@ -76,6 +76,11 @@ let guessInputFocused = false;
 /** Invalid text must never confirm a stale marker that happens to remain on the rail. */
 let guessInputInvalid = false;
 let scoreToBeat: number | null = null;
+/** Verse when the refine cue was armed; moving away dismisses it. */
+let timelineCueRefineVerse: number | null = null;
+/** Once dismissed for this placement, stay hidden until the marker is cleared. */
+let timelineCueDismissed = false;
+let timelineCueHideTimer: number | null = null;
 
 function activeTexts(): TextBundle {
   return textsByTranslation[translation];
@@ -594,6 +599,9 @@ function startMode(mode: "daily" | "endless", puzzleNumber?: number): void {
   strip = null;
   activeZoom = null;
   guessInputInvalid = false;
+  timelineCueRefineVerse = null;
+  timelineCueDismissed = false;
+  clearTimelineCueTimer();
   const texts = activeTexts();
   round =
     mode === "daily"
@@ -781,14 +789,20 @@ function renderPlay(): void {
     provisionalGuess == null
       ? "Place roughly on the timeline, then refine"
       : "Refine on the notches, then Confirm";
+  const cueClass =
+    provisionalGuess == null
+      ? "timeline-cue"
+      : timelineCueDismissed
+        ? "timeline-cue is-refine is-hidden"
+        : "timeline-cue is-refine";
   hudMid.append(
     el("p", {
       class: "sr-only",
       id: "timeline-instructions",
-      text: "Place a marker roughly on the canon timeline. The view zooms in so you can refine with verse notches. Or type a Bible reference. Arrow keys move one verse, Shift plus arrow moves ten, Enter confirms.",
+      text: "Place a marker roughly on the canon timeline. The view zooms in so you can refine with verse notches. Or type a Bible reference. Use the right-edge quick scroll to zoom out to the full canon and jump. Arrow keys move one verse, Shift plus arrow moves ten, Enter confirms.",
     }),
     el("p", {
-      class: `timeline-cue${provisionalGuess == null ? "" : " is-refine"}`,
+      class: cueClass,
       id: "timeline-cue",
       "aria-hidden": "true",
       text: cueText,
@@ -899,6 +913,11 @@ function renderPlay(): void {
     activeZoom = null;
     const zoomBar = document.querySelector<HTMLElement>(".zoom-bar");
     if (zoomBar) syncZoomBarUI(zoomBar);
+    // Quick-scroll / zoom-out leaves precision — drop the refine prompt.
+    if (timelineCueRefineVerse != null && !(strip?.isPrecisionView() ?? false)) {
+      const cue = document.querySelector("#timeline-cue");
+      if (cue && !timelineCueDismissed) dismissTimelineCue(cue);
+    }
   });
   if (round.phase === "revealed" && round.guessVerseIndex != null) {
     // Result: OT/NT frame (or full map if cross-testament) — reveal sets span.
@@ -1197,17 +1216,62 @@ function syncConfirmEnabled(): void {
   if (conf) conf.disabled = provisionalGuess == null || guessInputInvalid;
 }
 
+function clearTimelineCueTimer(): void {
+  if (timelineCueHideTimer != null) {
+    window.clearTimeout(timelineCueHideTimer);
+    timelineCueHideTimer = null;
+  }
+}
+
+function dismissTimelineCue(cue: Element): void {
+  timelineCueDismissed = true;
+  clearTimelineCueTimer();
+  cue.classList.add("is-hidden");
+}
+
 function syncTimelineCue(): void {
   const cue = document.querySelector("#timeline-cue");
   if (!cue) return;
   if (provisionalGuess == null) {
     cue.textContent = "Place roughly on the timeline, then refine";
     cue.classList.remove("is-hidden", "is-refine");
+    timelineCueRefineVerse = null;
+    timelineCueDismissed = false;
+    clearTimelineCueTimer();
     return;
   }
+
   cue.textContent = "Refine on the notches, then Confirm";
   cue.classList.add("is-refine");
+
+  if (timelineCueDismissed) {
+    cue.classList.add("is-hidden");
+    return;
+  }
+
   cue.classList.remove("is-hidden");
+
+  // Arm once per placement: fade after a beat, or sooner when the player
+  // scrubs notches / uses quick-scroll (see dismiss hooks below).
+  if (timelineCueRefineVerse == null) {
+    timelineCueRefineVerse = provisionalGuess;
+    clearTimelineCueTimer();
+    timelineCueHideTimer = window.setTimeout(() => {
+      timelineCueHideTimer = null;
+      const live = document.querySelector("#timeline-cue");
+      if (live) dismissTimelineCue(live);
+    }, 2600);
+  } else if (
+    strip?.isPrecisionView() &&
+    provisionalGuess !== timelineCueRefineVerse
+  ) {
+    // Player moved on the verse notches — prompt has done its job.
+    dismissTimelineCue(cue);
+  } else if (!strip?.isPrecisionView()) {
+    // Still in the broad placement drag: keep the anchor on the latest verse
+    // so the first precision scrub is measured from the drop point.
+    timelineCueRefineVerse = provisionalGuess;
+  }
 }
 
 /** Progressive disclosure: zoom + hint after a marker (type field always on). */
@@ -1249,6 +1313,9 @@ function continueDailyRound(current: RoundData): void {
   round = advanceDailyRound(current, activeTexts());
   provisionalGuess = null;
   activeZoom = null;
+  timelineCueRefineVerse = null;
+  timelineCueDismissed = false;
+  clearTimelineCueTimer();
   renderPlay();
 }
 
@@ -1475,9 +1542,10 @@ function syncZoomBarUI(bar: HTMLElement): void {
       );
     }
   });
-  const precision = strip?.isPrecisionView() ?? false;
+  const span = strip?.getState().viewport.span ?? FULL_CANON_SPAN;
+  const showZoomOut = span < FULL_CANON_SPAN - 1;
   document.querySelectorAll<HTMLElement>(".precision-zoom-out").forEach((node) => {
-    node.hidden = !precision;
+    node.hidden = !showZoomOut;
   });
 }
 
@@ -1540,8 +1608,8 @@ function makePrecisionZoomOut(): HTMLButtonElement {
     class: "precision-zoom-out",
     type: "button",
     id: "zoom-out-precision",
-    title: "Zoom out from verse precision",
-    "aria-label": "Zoom out from verse precision",
+    title: "Zoom out to full canon",
+    "aria-label": "Zoom out to full canon",
   });
   zoomOut.innerHTML = `<svg class="precision-zoom-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <circle cx="10.5" cy="10.5" r="6.25" />

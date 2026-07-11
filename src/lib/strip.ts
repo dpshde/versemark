@@ -23,6 +23,11 @@ import {
   viewportForPrecision,
   viewportForRange,
   viewportFullCanon,
+  portraitRailCross,
+  isQuickScrollHit,
+  quickScrollVerse,
+  verseToT,
+  QUICK_SCROLL_HIT,
 } from "./axis";
 import {
   TOTAL_VERSES,
@@ -114,6 +119,8 @@ export class CanonStrip {
   private placing = false;
   /** Free-pan mode after reveal (or explicit pan without a marker). */
   private panning = false;
+  /** Portrait quick-scroll: full-canon jump via the right-edge track. */
+  private quickScrolling = false;
   private lastAxis = 0;
   private hoverVerse: number | null = null;
   private activePointerType: string | null = null;
@@ -123,8 +130,6 @@ export class CanonStrip {
   private ro: ResizeObserver | null = null;
   private animFrame = 0;
   private viewportAnimFrame = 0;
-  /** Broad view captured immediately before automatic verse-precision zoom. */
-  private prePrecisionViewport: Viewport | null = null;
   private edgeScrollRaf = 0;
   private edgeScrollDirection = 0;
   private edgeScrollHoldStart = 0;
@@ -191,7 +196,6 @@ export class CanonStrip {
    */
   setZoomPreset(preset: ZoomPreset, focusVerse?: number): void {
     this.stopViewportAnimation();
-    this.prePrecisionViewport = null;
     const focus =
       focusVerse ??
       this.state.provisionalGuess ??
@@ -208,7 +212,6 @@ export class CanonStrip {
   /** Restore full-canon overview (all zoom presets off). */
   clearZoom(): void {
     this.stopViewportAnimation();
-    this.prePrecisionViewport = null;
     this.state.viewport = viewportFullCanon(this.state.viewport);
     this.onFreeViewChange?.();
     this.render();
@@ -218,14 +221,16 @@ export class CanonStrip {
     return this.state.viewport.span <= PRECISION_THRESHOLD;
   }
 
-  /** Return to the broad view captured before automatic precision zoom. */
+  /**
+   * Leave verse precision for the full-canon overview so the player can
+   * jump elsewhere quickly (mobile quick-scroll / zoom-out control).
+   */
   zoomOutFromPrecision(): void {
-    if (!this.isPrecisionView()) return;
+    if (!this.isPrecisionView() && this.state.viewport.span >= FULL_CANON_SPAN - 1) {
+      return;
+    }
     this.stopViewportAnimation();
-    this.state.viewport = this.prePrecisionViewport
-      ? { ...this.prePrecisionViewport }
-      : viewportFullCanon(this.state.viewport);
-    this.prePrecisionViewport = null;
+    this.state.viewport = viewportFullCanon(this.state.viewport);
     this.onFreeViewChange?.();
     this.render();
   }
@@ -259,7 +264,6 @@ export class CanonStrip {
       this.render();
       return;
     }
-    this.prePrecisionViewport = { ...this.state.viewport };
     this.animateToViewport(target);
   }
 
@@ -275,7 +279,6 @@ export class CanonStrip {
     this.state.revealed = true;
     // Zoom to the testament that holds the answer (OT or NT). Cross-testament
     // misses open the full canon so both markers stay on the map.
-    this.prePrecisionViewport = null;
     this.state.viewport = this.viewportForResult(
       this.state.lockedGuess ?? this.state.trueVerse,
       this.state.trueVerse
@@ -410,6 +413,7 @@ export class CanonStrip {
       this.dragging = false;
       this.placing = false;
       this.panning = false;
+      this.quickScrolling = false;
       this.activePointerType = null;
       this.canvas.classList.remove("is-placing");
       this.stopEdgeScroll();
@@ -421,6 +425,7 @@ export class CanonStrip {
      * - Playing: finger owns the marker (tap or drag to place/adjust).
      *   Scroll only when the finger sits in an edge zone so the pointer
      *   would otherwise leave the visible span (edge auto-pan).
+     * - Portrait quick-scroll (right edge): zoom to full canon and jump.
      * - Revealed: free drag pans the timeline.
      */
     this.canvas.addEventListener("pointerdown", (e) => {
@@ -434,6 +439,21 @@ export class CanonStrip {
       this.lastAxis = axisCoord(e);
 
       if (!this.state.revealed) {
+        const rect = this.canvas.getBoundingClientRect();
+        const localX = e.clientX - rect.left;
+        if (
+          this.state.viewport.orientation === "vertical" &&
+          isQuickScrollHit(localX, this.canvasW || rect.width)
+        ) {
+          this.quickScrolling = true;
+          this.placing = false;
+          this.panning = false;
+          this.canvas.classList.add("is-placing");
+          hapticLight();
+          this.applyQuickScroll(e.clientY - rect.top);
+          return;
+        }
+        this.quickScrolling = false;
         this.placing = true;
         this.panning = false;
         this.canvas.classList.add("is-placing");
@@ -445,6 +465,7 @@ export class CanonStrip {
       } else {
         this.placing = false;
         this.panning = true;
+        this.quickScrolling = false;
       }
     });
 
@@ -462,6 +483,12 @@ export class CanonStrip {
       }
       const deltaPx = axis - this.lastAxis;
       this.lastAxis = axis;
+
+      if (this.quickScrolling) {
+        const rect = this.canvas.getBoundingClientRect();
+        this.applyQuickScroll(e.clientY - rect.top);
+        return;
+      }
 
       if (this.panning) {
         const cpp = this.state.viewport.span / this.state.viewport.axisPx;
@@ -488,9 +515,10 @@ export class CanonStrip {
     });
 
     this.canvas.addEventListener("pointerup", () => {
+      const wasQuick = this.quickScrolling;
       const shouldAutoZoom =
         !this.state.revealed &&
-        this.placing &&
+        (this.placing || wasQuick) &&
         this.state.provisionalGuess != null &&
         this.state.viewport.span > PRECISION_THRESHOLD;
       const focus = this.state.provisionalGuess;
@@ -607,8 +635,22 @@ export class CanonStrip {
 
   /** Transition from broad canon placement into a verse-resolvable ruler. */
   private autoZoomForPrecision(focusVerse: number): void {
-    this.prePrecisionViewport = { ...this.state.viewport };
     this.animateToViewport(viewportForPrecision(this.state.viewport, focusVerse));
+  }
+
+  /**
+   * Portrait quick-scroll: snap to the full-canon overview and place the
+   * marker at the verse under the finger (Genesis at top → Revelation).
+   */
+  private applyQuickScroll(canvasY: number): void {
+    const free = this.freeAxis();
+    const verse = quickScrollVerse(canvasY, free.origin, free.length);
+    this.stopViewportAnimation();
+    if (this.state.viewport.span < FULL_CANON_SPAN - 1) {
+      this.state.viewport = viewportFullCanon(this.state.viewport);
+      this.onFreeViewChange?.();
+    }
+    this.setProvisionalGuess(verse);
   }
 
   private stopViewportAnimation(): void {
@@ -766,7 +808,7 @@ export class CanonStrip {
 
   /**
    * Cross-axis center of the free band (between chrome insets).
-   * Horizontal rail: y. Vertical rail: x.
+   * Horizontal rail: y (centered). Vertical rail: x (hugs left).
    */
   private railCross(w: number, h: number): number {
     const { top, bottom, start, end } = this.chrome;
@@ -774,8 +816,7 @@ export class CanonStrip {
       const free = Math.max(48, h - top - bottom);
       return top + free * 0.5;
     }
-    const free = Math.max(48, w - start - end);
-    return start + free * 0.5;
+    return portraitRailCross(w, start, end, this.railThick());
   }
 
   private railThick(): number {
@@ -837,9 +878,8 @@ export class CanonStrip {
       const truth = this.state.trueVerse;
       if (guess != null && guess !== truth) {
         this.drawConnector(guess, truth, w, h);
-        // Landscape: opposite sides along the rail. Portrait: YOU left / TRUE
-        // right of the rail (coordinated layout so long refs never flip
-        // onto the same side and stack).
+        // Landscape: opposite sides along the rail. Portrait: YOU + TRUE
+        // both sit to the right of the left-hugged rail.
         const isH = this.state.viewport.orientation === "horizontal";
         if (isH) {
           const guessAbove = guess < truth;
@@ -857,6 +897,7 @@ export class CanonStrip {
             guessAbove ? "below" : "above"
           );
         } else {
+          // Portrait: YOU + TRUE both sit to the right of the left-hugged rail.
           const guessPt = this.railPoint(guess, w, h);
           const truePt = this.railPoint(truth, w, h);
           const pair = this.layoutPortraitResultPair(
@@ -897,6 +938,10 @@ export class CanonStrip {
         w,
         h
       );
+    }
+
+    if (!resultView && this.state.viewport.orientation === "vertical") {
+      this.drawQuickScrollTrack(w);
     }
 
     this.syncResultLinks();
@@ -1088,7 +1133,12 @@ export class CanonStrip {
         const x =
           cross + thick / 2 + NOTCH_GAP + ACTIVE_NOTCH_LENGTH + 10;
         ctx.textAlign = "left";
-        ctx.fillText(label, x, p.y, Math.max(48, w - x - 6));
+        ctx.fillText(
+          label,
+          x,
+          p.y,
+          Math.max(48, w - x - QUICK_SCROLL_HIT - 6)
+        );
       }
     }
 
@@ -1224,12 +1274,12 @@ export class CanonStrip {
         ctx.textAlign = "left";
         ctx.fillText(seg.name.toUpperCase(), 0, 0);
       } else {
-        // Portrait/mobile: upright at book start, left of the rail
-        ctx.textAlign = "right";
+        // Portrait/mobile: upright at book start, right of the left-hugged rail
+        ctx.textAlign = "left";
         ctx.textBaseline = "top";
         ctx.fillText(
           seg.name.toUpperCase(),
-          p.x - thick / 2 - gap,
+          p.x + thick / 2 + gap,
           p.y + 1
         );
       }
@@ -1388,7 +1438,7 @@ export class CanonStrip {
 
   /* ———— 8. Marker label ———— */
 
-  /** Keep the live reference opposite the notch ruler. */
+  /** Keep the live reference with the notch ruler (right of the portrait rail). */
   private drawSelectionLabel(
     label: string,
     p: Point,
@@ -1413,9 +1463,10 @@ export class CanonStrip {
       ctx.textAlign = "left";
       ctx.fillText(text, 0, 0, available);
     } else {
-      const x = p.x - offset;
-      const available = Math.max(40, x - this.chrome.start - 4);
-      ctx.textAlign = "right";
+      // Past the notch ruler so chapter labels and the live ref share the right.
+      const x = p.x + offset + ACTIVE_NOTCH_LENGTH + 10;
+      const available = Math.max(40, this.canvasW - x - QUICK_SCROLL_HIT - 4);
+      ctx.textAlign = "left";
       ctx.fillText(text, x, p.y, available);
     }
 
@@ -1456,10 +1507,9 @@ export class CanonStrip {
   }
 
   /**
-   * Portrait pair layout: YOU always left of the rail, TRUE always right.
-   * Long refs shrink into their half instead of flipping sides (which caused
-   * stacked/overlapping chips on close or mid-distance misses).
-   * When pin Ys are near enough that chips would still collide, push apart.
+   * Portrait pair layout: YOU and TRUE both sit to the right of the
+   * left-hugged rail. Long refs shrink into the remaining width; near
+   * pins push apart vertically so chips never stack on the same side.
    */
   private layoutPortraitResultPair(
     guessPt: Point,
@@ -1476,37 +1526,21 @@ export class CanonStrip {
     const minChipW = 56;
     const edge = 4;
     const yGap = 8;
+    const rightLimit = w - edge - QUICK_SCROLL_HIT;
 
-    const placeBeside = (
+    const placeRight = (
       pin: Point,
       naturalW: number,
-      bh: number,
-      side: "left" | "right"
+      bh: number
     ): ResultChipLayout => {
-      // Prefer the pin's rail x so both chips bookend the same spine.
-      const railX = pin.x;
-      let bw: number;
-      let bx: number;
-      if (side === "left") {
-        const rightEdge = railX - crossGap;
-        const maxBw = Math.max(minChipW, rightEdge - edge);
-        bw = Math.min(naturalW, maxBw);
-        bx = rightEdge - bw;
-        if (bx < edge) {
-          bx = edge;
-          bw = Math.max(minChipW, Math.min(bw, rightEdge - edge));
-        }
-      } else {
-        const leftEdge = railX + crossGap;
-        const maxBw = Math.max(minChipW, w - edge - leftEdge);
-        bw = Math.min(naturalW, maxBw);
-        bx = leftEdge;
-        if (bx + bw > w - edge) {
-          bw = Math.max(minChipW, Math.min(bw, w - edge - leftEdge));
-          bx = Math.min(leftEdge, w - edge - bw);
-          // Never cross onto the left half of the rail.
-          if (bx < leftEdge) bx = leftEdge;
-        }
+      const leftEdge = pin.x + crossGap;
+      const maxBw = Math.max(minChipW, rightLimit - leftEdge);
+      let bw = Math.min(naturalW, maxBw);
+      let bx = leftEdge;
+      if (bx + bw > rightLimit) {
+        bw = Math.max(minChipW, Math.min(bw, rightLimit - leftEdge));
+        bx = Math.min(leftEdge, rightLimit - bw);
+        if (bx < leftEdge) bx = leftEdge;
       }
       let by = pin.y - bh / 2;
       by = Math.min(
@@ -1516,8 +1550,8 @@ export class CanonStrip {
       return { bx, by, bw, bh };
     };
 
-    const you = placeBeside(guessPt, youM.bw, youM.bh, "left");
-    const truth = placeBeside(truePt, trueM.bw, trueM.bh, "right");
+    const you = placeRight(guessPt, youM.bw, youM.bh);
+    const truth = placeRight(truePt, trueM.bw, trueM.bh);
 
     // Vertical separation when chips still collide (near-miss pins).
     const overlapY =
@@ -1550,8 +1584,8 @@ export class CanonStrip {
 
   /**
    * Result-page callout: role caption + verse ref.
-   * Portrait: YOU left / TRUE right via coordinated layout (see
-   * layoutPortraitResultPair). Landscape: above/below along the band.
+   * Portrait: YOU + TRUE to the right of the left-hugged rail.
+   * Landscape: above/below along the band.
    * Registers a hit box so the chip is a real route.bible link overlay.
    */
   private drawResultLabel(
@@ -1567,7 +1601,6 @@ export class CanonStrip {
     const { ctx } = this;
     const free = this.freeAxis();
     const isV = this.state.viewport.orientation === "vertical";
-    const isYou = role.toLowerCase() === "you";
     const verseLabel = formatVerseLabel(verseIndex);
     const metrics = this.measureResultChip(verseLabel, role);
     const { ref, roleText } = metrics;
@@ -1590,7 +1623,7 @@ export class CanonStrip {
       by = chipLayout.by;
       bw = chipLayout.bw;
     } else if (isV) {
-      // Solo portrait label (perfect hit / single marker): prefer role side.
+      // Solo portrait label: always to the right of the left-hugged rail.
       by = p.y - bh / 2;
       by = Math.min(
         free.origin + free.length - bh - 2,
@@ -1598,18 +1631,12 @@ export class CanonStrip {
       );
       const minChipW = 56;
       const edge = 4;
-      if (isYou) {
-        const rightEdge = p.x - crossGap;
-        const maxBw = Math.max(minChipW, rightEdge - edge);
-        bw = Math.min(bw, maxBw);
-        bx = Math.max(edge, rightEdge - bw);
-      } else {
-        const leftEdge = p.x + crossGap;
-        const maxBw = Math.max(minChipW, w - edge - leftEdge);
-        bw = Math.min(bw, maxBw);
-        bx = leftEdge;
-        if (bx + bw > w - edge) bx = Math.max(leftEdge, w - edge - bw);
-      }
+      const leftEdge = p.x + crossGap;
+      const rightLimit = w - edge - QUICK_SCROLL_HIT;
+      const maxBw = Math.max(minChipW, rightLimit - leftEdge);
+      bw = Math.min(bw, maxBw);
+      bx = leftEdge;
+      if (bx + bw > rightLimit) bx = Math.max(leftEdge, rightLimit - bw);
     } else {
       bx = p.x - bw / 2;
       by = side === "above" ? p.y - bh - stem : p.y + stem;
@@ -1696,6 +1723,40 @@ export class CanonStrip {
   private clearResultLinks(): void {
     this.resultLinkHits = [];
     if (this.linkLayer) this.linkLayer.replaceChildren();
+  }
+
+  /**
+   * Thin right-edge track for portrait quick-scroll. Dragging it zooms to
+   * the full canon and jumps the marker to the verse under the finger.
+   */
+  private drawQuickScrollTrack(w: number): void {
+    const { ctx } = this;
+    const free = this.freeAxis();
+    const trackX = w - QUICK_SCROLL_HIT / 2;
+    const trackW = 3;
+    const focus =
+      this.state.provisionalGuess ??
+      this.state.lockedGuess ??
+      this.state.viewport.center;
+    const t = verseToT(focus);
+    const thumbY = free.origin + t * free.length;
+
+    ctx.save();
+    ctx.strokeStyle = INK_3;
+    ctx.globalAlpha = this.quickScrolling ? 0.55 : 0.28;
+    ctx.lineWidth = trackW;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(trackX, free.origin + 4);
+    ctx.lineTo(trackX, free.origin + free.length - 4);
+    ctx.stroke();
+
+    ctx.globalAlpha = this.quickScrolling ? 0.95 : 0.7;
+    ctx.fillStyle = this.quickScrolling ? ACCENT : INK_2;
+    ctx.beginPath();
+    ctx.arc(trackX, thumbY, this.quickScrolling ? 5 : 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   /**

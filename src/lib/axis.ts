@@ -340,3 +340,50 @@ export function viewportForPrecision(
     minSpan: 150,
   });
 }
+
+/** Left padding (px) before the portrait rail so notches/labels own the right. */
+export const PORTRAIT_RAIL_INSET = 14;
+
+/** Hit width (px) for the mobile full-canon quick-scroll track. */
+export const QUICK_SCROLL_HIT = 28;
+
+/**
+ * Cross-axis (x) center of the vertical rail: hug the left of the free band
+ * so book/chapter/selection labels and notches all sit to the right.
+ */
+export function portraitRailCross(
+  width: number,
+  startInset: number,
+  endInset: number,
+  railThick: number
+): number {
+  const free = Math.max(48, width - startInset - endInset);
+  const thick = Math.max(1, railThick);
+  const maxCross = startInset + free - thick / 2 - 4;
+  const hugged = startInset + PORTRAIT_RAIL_INSET + thick / 2;
+  return Math.min(maxCross, Math.max(startInset + thick / 2, hugged));
+}
+
+/** Whether a portrait pointer x falls in the right-edge quick-scroll zone. */
+export function isQuickScrollHit(
+  x: number,
+  width: number,
+  hitWidth: number = QUICK_SCROLL_HIT
+): boolean {
+  const zone = Math.max(12, Math.min(hitWidth, width * 0.2));
+  return x >= width - zone;
+}
+
+/**
+ * Map a free-band axis coordinate to a verse on the full canon
+ * (Genesis at origin, Revelation at origin + length).
+ */
+export function quickScrollVerse(
+  axisPos: number,
+  freeOrigin: number,
+  freeLength: number
+): number {
+  const length = Math.max(1, freeLength);
+  const t = (axisPos - freeOrigin) / length;
+  return tToVerse(t);
+}

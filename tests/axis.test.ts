@@ -17,6 +17,9 @@ import {
   viewportForPrecision,
   viewportForRange,
   viewportFullCanon,
+  portraitRailCross,
+  isQuickScrollHit,
+  quickScrollVerse,
   OT_END,
   NT_START,
   FULL_CANON_SPAN,
@@ -241,5 +244,33 @@ describe("zoom presets", () => {
     const full = viewportFullCanon(zoomed);
     expect(full.span).toBe(FULL_CANON_SPAN);
     expect(full.center).toBe((TOTAL_VERSES + 1) / 2);
+  });
+});
+
+describe("portrait rail + quick scroll", () => {
+  it("hugs the left of the free band", () => {
+    const cross = portraitRailCross(390, 0, 0, 12);
+    expect(cross).toBeLessThan(390 * 0.25);
+    expect(cross).toBeGreaterThan(10);
+  });
+
+  it("stays inside the free band when chrome insets apply", () => {
+    const cross = portraitRailCross(390, 8, 40, 16);
+    expect(cross).toBeGreaterThanOrEqual(8 + 8);
+    expect(cross).toBeLessThan(200);
+  });
+
+  it("detects the right-edge quick-scroll hit zone", () => {
+    expect(isQuickScrollHit(380, 390)).toBe(true);
+    expect(isQuickScrollHit(200, 390)).toBe(false);
+    expect(isQuickScrollHit(0, 390)).toBe(false);
+  });
+
+  it("maps free-band axis position to full-canon verses", () => {
+    expect(quickScrollVerse(0, 0, 100)).toBe(1);
+    expect(quickScrollVerse(100, 0, 100)).toBe(TOTAL_VERSES);
+    const mid = quickScrollVerse(50, 0, 100);
+    expect(mid).toBeGreaterThan(TOTAL_VERSES * 0.4);
+    expect(mid).toBeLessThan(TOTAL_VERSES * 0.6);
   });
 });
