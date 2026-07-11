@@ -45,6 +45,7 @@ import {
 import {
   computeMastery,
   formatMiss,
+  formatMissDistance,
   type MasteryReport,
 } from "./lib/mastery";
 import {
@@ -353,10 +354,7 @@ function renderAchievements(): void {
       const ol = el("ol", { class: "worst-rounds-list" });
       for (const w of mastery.worstRounds) {
         const guess = formatVerseLabel(w.guessVerseIndex);
-        const dist =
-          w.effectiveDistance === 0
-            ? "exact"
-            : `${w.effectiveDistance} verse${w.effectiveDistance === 1 ? "" : "s"} off`;
+        const dist = formatMissDistance(w.effectiveDistance);
         ol.append(
           el("li", { text: `${w.trueRef} · placed ${guess} · ${dist}` })
         );

@@ -76,17 +76,26 @@ export function median(values: number[]): number {
 }
 
 /**
- * Reader-facing median miss. "Typically" is the honest reading of a median.
- * Chapters use ~26 verses (canon average).
+ * Single-round miss in natural units. Chapters use ~26 verses (canon average).
+ * Same thresholds as median mastery so worst rounds stay consistent with rows.
  */
-export function formatMiss(d: number): string {
-  if (!Number.isFinite(d) || d <= 0) return "typically exact";
+export function formatMissDistance(d: number): string {
+  if (!Number.isFinite(d) || d <= 0) return "exact";
   if (d < 20) {
     const n = Math.max(1, Math.round(d));
-    return `typically ~${n} verse${n === 1 ? "" : "s"} off`;
+    return `~${n} verse${n === 1 ? "" : "s"} off`;
   }
   const chapters = Math.max(1, Math.round(d / VERSES_PER_CHAPTER));
-  return `typically ~${chapters} chapter${chapters === 1 ? "" : "s"} off`;
+  return `~${chapters} chapter${chapters === 1 ? "" : "s"} off`;
+}
+
+/**
+ * Reader-facing median miss. "Typically" is the honest reading of a median.
+ */
+export function formatMiss(d: number): string {
+  const base = formatMissDistance(d);
+  if (base === "exact") return "typically exact";
+  return `typically ${base}`;
 }
 
 interface Acc {

@@ -4,6 +4,7 @@ import {
   computeMastery,
   median,
   formatMiss,
+  formatMissDistance,
   GENRE_SAMPLE_MIN,
   BOOK_SAMPLE_MIN,
 } from "../src/lib/mastery";
@@ -103,20 +104,23 @@ describe("median", () => {
   });
 });
 
-describe("formatMiss", () => {
+describe("formatMiss / formatMissDistance", () => {
   it("labels exact landings", () => {
+    expect(formatMissDistance(0)).toBe("exact");
     expect(formatMiss(0)).toBe("typically exact");
   });
 
   it("uses verses under 20", () => {
+    expect(formatMissDistance(3)).toBe("~3 verses off");
+    expect(formatMissDistance(1)).toBe("~1 verse off");
     expect(formatMiss(3)).toBe("typically ~3 verses off");
-    expect(formatMiss(1)).toBe("typically ~1 verse off");
   });
 
   it("uses chapters for larger misses (~26 verses each)", () => {
     // 120 * 26 = 3120 → rounds to 120 chapters
+    expect(formatMissDistance(3120)).toBe("~120 chapters off");
+    expect(formatMissDistance(26)).toBe("~1 chapter off");
     expect(formatMiss(3120)).toBe("typically ~120 chapters off");
-    expect(formatMiss(26)).toBe("typically ~1 chapter off");
   });
 });
 
