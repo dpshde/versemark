@@ -889,7 +889,7 @@ export class CanonStrip {
     this.resultLinkHits = [];
 
     this.drawBackground(w, h);
-    // Always keep genre-tinted segments — they orient you on the close-up
+    // Wide keeps genre-tinted segments; portrait uses a uniform rail.
     this.drawBookSegments(w, h);
     // Result: keep seam + edge labels when visible for orientation.
     // Book names stay off so marker labels aren't crowded.
@@ -1000,7 +1000,8 @@ export class CanonStrip {
       ctx.fillRect(cross - thick / 2, free.origin, thick, free.length);
     }
 
-    // Genre segments
+    // Genre segments — portrait keeps a calm uniform rail; wide keeps tints.
+    const portrait = !isH;
     for (const seg of bookSegments()) {
       if (seg.endVerseIndex < range.start || seg.startVerseIndex > range.end) continue;
       const from = Math.max(seg.startVerseIndex, range.start);
@@ -1010,7 +1011,7 @@ export class CanonStrip {
       const len = isH ? toPx.x - fromPx.x : toPx.y - fromPx.y;
       if (len < 1) continue;
 
-      const tint = GENRE_TINT[seg.genre] ?? RAIL;
+      const tint = portrait ? RAIL : (GENRE_TINT[seg.genre] ?? RAIL);
       ctx.fillStyle = tint;
       if (isH) {
         ctx.fillRect(fromPx.x, cross - thick / 2, len, thick);
@@ -1019,7 +1020,9 @@ export class CanonStrip {
       }
     }
 
-    if (vp.span > PRECISION_THRESHOLD) {
+    // Genre captions (LAW / HISTORY / …) are wide-only — on phones they
+    // fight the book-name column inside the thin left-hugged rail.
+    if (!portrait && vp.span > PRECISION_THRESHOLD) {
       this.drawGenreLabels(range, w, h, cross, isH);
     }
 
