@@ -46,6 +46,7 @@ import {
   computeMastery,
   formatMiss,
   formatMissDistance,
+  missShare,
   type MasteryReport,
 } from "./lib/mastery";
 import {
@@ -306,7 +307,7 @@ function renderAchievements(): void {
 
   const body = el("div", { class: "achievements-body" });
 
-  // —— Summary (type-only, no label, no ruling) ——
+  // —— Summary (ledger: lead count, then quiet meta) ——
   const summary = el("div", {
     class: "achievements-summary",
     "aria-label": "Lifetime summary",
@@ -319,9 +320,21 @@ function renderAchievements(): void {
       })
     );
   } else {
+    const lead = el("p", { class: "achievements-summary-lead" });
+    lead.append(
+      el("span", {
+        class: "achievements-summary-count",
+        text: String(mastery.totalRounds),
+      }),
+      document.createTextNode(
+        mastery.totalRounds === 1 ? " round" : " rounds"
+      )
+    );
+    summary.append(lead);
     summary.append(
       el("p", {
-        text: `${mastery.totalRounds} rounds · ${mastery.dailyRoundCount} daily · ${mastery.practiceRoundCount} practice`,
+        class: "achievements-summary-meta",
+        text: `${mastery.dailyRoundCount} daily · ${mastery.practiceRoundCount} practice`,
       })
     );
     const parts = [
@@ -331,14 +344,19 @@ function renderAchievements(): void {
     if (mastery.bestStreak > 0) {
       parts.push(`streak ${mastery.streak} · best ${mastery.bestStreak}`);
     }
-    summary.append(el("p", { text: parts.join(" · ") }));
+    summary.append(
+      el("p", {
+        class: "achievements-summary-meta",
+        text: parts.join(" · "),
+      })
+    );
   }
   body.append(summary);
 
   if (mastery.totalRounds > 0) {
     // —— Genres ——
     body.append(
-      el("h2", { class: "achievements-section-label", text: "Genres" })
+      el("h2", { class: "achievements-section", text: "Genres" })
     );
     if (!mastery.genres.length) {
       body.append(
@@ -353,7 +371,7 @@ function renderAchievements(): void {
 
     // —— Books ——
     body.append(
-      el("h2", { class: "achievements-section-label", text: "Books" })
+      el("h2", { class: "achievements-section", text: "Books" })
     );
     if (!mastery.books.length) {
       body.append(
@@ -389,25 +407,45 @@ function renderAchievements(): void {
       mastery.worstRounds.length &&
       mastery.worstRounds[0].effectiveDistance > 0
     ) {
-      const details = el("details", { class: "worst-rounds" });
-      details.append(el("summary", { text: "Worst rounds" }));
-      const ol = el("ol", { class: "worst-rounds-list" });
-      for (const w of mastery.worstRounds) {
+      body.append(
+        el("h2", { class: "achievements-section", text: "Worst rounds" })
+      );
+      const ol = el("ol", {
+        class: "worst-rounds-list",
+        "aria-label": "Worst rounds",
+      });
+      for (const [i, w] of mastery.worstRounds.entries()) {
+        const truth = formatVerseLabel(w.trueVerseIndex);
         const guess = formatVerseLabel(w.guessVerseIndex);
         const dist = formatMissDistance(w.effectiveDistance);
-        ol.append(
-          el("li", { text: `${w.trueRef} · placed ${guess} · ${dist}` })
+        const li = el("li", {
+          class: "worst-round-row",
+          style: `--row-i: ${i}`,
+        });
+        li.append(
+          el("div", { class: "worst-round-main" }, [
+            el("span", { class: "worst-round-ref", text: truth }),
+            el("span", {
+              class: "worst-round-miss",
+              text: dist,
+            }),
+          ]),
+          el("p", {
+            class: "worst-round-sub",
+            text: `placed ${guess}`,
+          }),
+          missRail(w.effectiveDistance)
         );
+        ol.append(li);
       }
-      details.append(ol);
-      body.append(details);
+      body.append(ol);
     }
   }
 
   // —— Unlocks (open-ended ladders; total is visible goals, not a ceiling) ——
   body.append(
     el("h2", {
-      class: "achievements-section-label",
+      class: "achievements-section",
       text: counts.openEnded
         ? `Unlocks · ${counts.unlocked}`
         : `Unlocks · ${counts.unlocked} / ${counts.total}`,
@@ -473,6 +511,21 @@ function renderAchievements(): void {
   app.append(screen);
 }
 
+function missRail(distance: number): HTMLElement {
+  const share = missShare(distance);
+  const rail = el("div", {
+    class:
+      share <= 0
+        ? "mastery-rail is-exact"
+        : "mastery-rail",
+    "aria-hidden": "true",
+  });
+  const fill = el("span", { class: "mastery-rail-fill" });
+  fill.style.width = `${Math.round(share * 1000) / 10}%`;
+  rail.append(fill);
+  return rail;
+}
+
 function masteryList(
   slices: MasteryReport["genres"],
   kind: string
@@ -481,22 +534,25 @@ function masteryList(
     class: "mastery-list",
     "aria-label": `${kind} mastery`,
   });
-  for (const s of slices) {
-    const name = el("span", { class: "mastery-name", text: s.label }, [
-      el("span", {
-        class: "mastery-count",
-        text: ` · ${s.rounds} rounds`,
-      }),
-    ]);
-    const row = el("li", { class: "mastery-row" }, [
+  for (const [i, s] of slices.entries()) {
+    const row = el("li", {
+      class: "mastery-row",
+      style: `--row-i: ${i}`,
+    });
+    row.append(
       el("div", { class: "mastery-row-main" }, [
-        name,
+        el("span", { class: "mastery-name", text: s.label }),
         el("span", {
-          class: "mastery-miss",
-          text: formatMiss(s.medianDistance),
+          class: "mastery-count",
+          text: `${s.rounds} ${s.rounds === 1 ? "round" : "rounds"}`,
         }),
       ]),
-    ]);
+      el("p", {
+        class: "mastery-miss",
+        text: formatMiss(s.medianDistance),
+      }),
+      missRail(s.medianDistance)
+    );
     const hits = [
       s.exactCount > 0 ? `${s.exactCount} exact` : null,
       s.nearCount > 0 ? `${s.nearCount} near` : null,

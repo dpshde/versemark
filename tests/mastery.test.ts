@@ -5,9 +5,11 @@ import {
   median,
   formatMiss,
   formatMissDistance,
+  missShare,
   GENRE_SAMPLE_MIN,
   BOOK_SAMPLE_MIN,
 } from "../src/lib/mastery";
+import { TOTAL_VERSES } from "../src/lib/books";
 import type { AppState, RoundRecord } from "../src/lib/storage";
 import { CLOSE_DISTANCE } from "../src/lib/scoring";
 
@@ -121,6 +123,20 @@ describe("formatMiss / formatMissDistance", () => {
     expect(formatMissDistance(3120)).toBe("~120 chapters off");
     expect(formatMissDistance(26)).toBe("~1 chapter off");
     expect(formatMiss(3120)).toBe("typically ~120 chapters off");
+  });
+});
+
+describe("missShare", () => {
+  it("is 0 for exact or non-finite", () => {
+    expect(missShare(0)).toBe(0);
+    expect(missShare(-1)).toBe(0);
+    expect(missShare(Number.NaN)).toBe(0);
+  });
+
+  it("scales against the full canon and caps at 1", () => {
+    expect(missShare(TOTAL_VERSES / 2)).toBeCloseTo(0.5, 5);
+    expect(missShare(TOTAL_VERSES)).toBe(1);
+    expect(missShare(TOTAL_VERSES * 2)).toBe(1);
   });
 });
 

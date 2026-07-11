@@ -2,7 +2,11 @@
  * Book / genre mastery and weaknesses from scored rounds.
  * Mastery = median effective miss distance (lower is better).
  */
-import { bookChapterVerseFromIndex, type Genre } from "./books";
+import {
+  bookChapterVerseFromIndex,
+  TOTAL_VERSES,
+  type Genre,
+} from "./books";
 import { CLOSE_DISTANCE } from "./scoring";
 import {
   isDailyComplete,
@@ -96,6 +100,15 @@ export function formatMiss(d: number): string {
   const base = formatMissDistance(d);
   if (base === "exact") return "typically exact";
   return `typically ${base}`;
+}
+
+/**
+ * How far a miss stretches across the full canon rail (0..1).
+ * Used for the quiet miss meter under mastery rows.
+ */
+export function missShare(d: number): number {
+  if (!Number.isFinite(d) || d <= 0) return 0;
+  return Math.min(1, d / TOTAL_VERSES);
 }
 
 interface Acc {
