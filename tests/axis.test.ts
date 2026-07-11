@@ -20,6 +20,7 @@ import {
   portraitRailCross,
   isQuickScrollHit,
   quickScrollVerse,
+  selectBookAnchors,
   OT_END,
   NT_START,
   FULL_CANON_SPAN,
@@ -272,5 +273,57 @@ describe("portrait rail + quick scroll", () => {
     const mid = quickScrollVerse(50, 0, 100);
     expect(mid).toBeGreaterThan(TOTAL_VERSES * 0.4);
     expect(mid).toBeLessThan(TOTAL_VERSES * 0.6);
+  });
+});
+
+describe("selectBookAnchors", () => {
+  const segs = bookSegments();
+  const full = {
+    span: FULL_CANON_SPAN,
+    center: (TOTAL_VERSES + 1) / 2,
+    rangeStart: 1,
+    rangeEnd: TOTAL_VERSES,
+  };
+
+  it("shows many more portrait landmarks than the old 12px floor", () => {
+    const anchors = selectBookAnchors(segs, {
+      ...full,
+      orientation: "vertical",
+      axisPx: 280,
+    });
+    // Phone overview previously only kept Genesis / Psalms / Jeremiah.
+    expect(anchors.length).toBeGreaterThanOrEqual(16);
+    const osis = anchors.map((a) => a.osis);
+    expect(osis).toContain("GEN");
+    expect(osis).toContain("PSA");
+    expect(osis).toContain("MAT");
+    expect(osis).toContain("ACT");
+  });
+
+  it("keeps larger books when starts would collide", () => {
+    const anchors = selectBookAnchors(segs, {
+      ...full,
+      orientation: "vertical",
+      axisPx: 280,
+    });
+    const osis = anchors.map((a) => a.osis);
+    expect(osis).toContain("PSA");
+    expect(osis).toContain("JER");
+    // Sorted in canon order for drawing.
+    for (let i = 1; i < anchors.length; i += 1) {
+      expect(anchors[i].startVerseIndex).toBeGreaterThan(
+        anchors[i - 1].startVerseIndex
+      );
+    }
+  });
+
+  it("keeps the wider horizontal size floor", () => {
+    const anchors = selectBookAnchors(segs, {
+      ...full,
+      orientation: "horizontal",
+      axisPx: 280,
+    });
+    // Horizontal still requires ~20px, so a short axis stays sparse.
+    expect(anchors.length).toBeLessThan(10);
   });
 });

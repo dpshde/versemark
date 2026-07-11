@@ -152,6 +152,61 @@ export function bookSegments(): BookSegment[] {
   }));
 }
 
+/**
+ * Choose book-start landmarks for the overview rail.
+ * Portrait uses a lower size floor and a minimum axis gap so phones get
+ * denser anchors without stacked labels. Larger books win collisions.
+ */
+export function selectBookAnchors(
+  segments: BookSegment[],
+  options: {
+    orientation: Orientation;
+    span: number;
+    axisPx: number;
+    center: number;
+    rangeStart: number;
+    rangeEnd: number;
+  }
+): Array<BookSegment & { lenPx: number }> {
+  const { orientation, span, axisPx, center, rangeStart, rangeEnd } = options;
+  const isH = orientation === "horizontal";
+  const minPx = isH ? 20 : 4;
+  /** Portrait: tight but readable spacing for phone overview landmarks. */
+  const minGap = isH ? 0 : 9;
+  const safeSpan = Math.max(1, span);
+  const safeAxis = Math.max(1, axisPx);
+  const half = safeSpan / 2;
+
+  const candidates: Array<BookSegment & { lenPx: number; axisPos: number }> = [];
+  for (const seg of segments) {
+    if (seg.startVerseIndex < rangeStart || seg.startVerseIndex > rangeEnd) {
+      continue;
+    }
+    const verses = seg.endVerseIndex - seg.startVerseIndex + 1;
+    const lenPx = (verses / safeSpan) * safeAxis;
+    if (lenPx < minPx) continue;
+    const axisPos =
+      ((seg.startVerseIndex - (center - half)) / safeSpan) * safeAxis;
+    candidates.push({ ...seg, lenPx, axisPos });
+  }
+
+  // Prefer longer books when two starts would collide.
+  candidates.sort((a, b) => b.lenPx - a.lenPx || a.startVerseIndex - b.startVerseIndex);
+  const accepted: Array<BookSegment & { lenPx: number; axisPos: number }> = [];
+  for (const candidate of candidates) {
+    if (
+      minGap > 0 &&
+      accepted.some((p) => Math.abs(p.axisPos - candidate.axisPos) < minGap)
+    ) {
+      continue;
+    }
+    accepted.push(candidate);
+  }
+
+  accepted.sort((a, b) => a.startVerseIndex - b.startVerseIndex);
+  return accepted.map(({ axisPos: _axisPos, ...rest }) => rest);
+}
+
 export function testamentSeamT(): number {
   return verseToT(TESTAMENT_SEAM_AFTER);
 }

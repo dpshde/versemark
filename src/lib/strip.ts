@@ -28,6 +28,7 @@ import {
   quickScrollVerse,
   verseToT,
   QUICK_SCROLL_HIT,
+  selectBookAnchors,
 } from "./axis";
 import {
   TOTAL_VERSES,
@@ -1247,23 +1248,24 @@ export class CanonStrip {
     // Chapter labels own the precision view; avoid a competing book label.
     if (vp.span <= PRECISION_THRESHOLD) return;
 
+    const anchors = selectBookAnchors(bookSegments(), {
+      orientation: vp.orientation,
+      span: vp.span,
+      axisPx: vp.axisPx,
+      center: vp.center,
+      rangeStart: range.start,
+      rangeEnd: range.end,
+    });
+
     ctx.save();
     ctx.font = `9px ${SERIF}`;
     setLetterSpacing(ctx, "0.5px");
     ctx.textBaseline = "middle";
-    for (const seg of bookSegments()) {
-      // Anchor at the book start — skip if that edge isn't on-screen
-      if (
-        seg.startVerseIndex < range.start ||
-        seg.startVerseIndex > range.end
-      ) {
-        continue;
-      }
-      const lenPx = this.chPx(seg.startVerseIndex, seg.endVerseIndex + 1);
-      // Keep short books quiet, but retain enough landmarks to navigate the
-      // full-canon overview without relying only on the very longest books.
-      if (lenPx < (isH ? 20 : 12)) continue;
-      const alpha = Math.min(0.7, 0.3 + (lenPx - 14) / 200);
+    for (const seg of anchors) {
+      // Slightly stronger floor on portrait so the denser set stays legible.
+      const alpha = isH
+        ? Math.min(0.7, 0.3 + (seg.lenPx - 14) / 200)
+        : Math.min(0.78, 0.42 + seg.lenPx / 160);
       const p = this.railPoint(seg.startVerseIndex, w, h);
       ctx.fillStyle = `rgba(110, 101, 90, ${alpha})`;
       ctx.save();
