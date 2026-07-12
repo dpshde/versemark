@@ -16,7 +16,7 @@ import {
   BOOK_SAMPLE_MIN,
 } from "../src/lib/mastery";
 import type { AppState, RoundRecord } from "../src/lib/storage";
-import { emptyAppState } from "../src/lib/storage";
+import { emptyAppState, foldRoundsIntoRollups } from "../src/lib/storage";
 import { CLOSE_DISTANCE } from "../src/lib/scoring";
 
 function r(
@@ -169,6 +169,36 @@ describe("computeDistanceTrend", () => {
         rounds: 1,
         medianDistance: 8,
         avgDistance: 8,
+      },
+    ]);
+  });
+
+  it("ignores undated legacy rounds instead of stretching to the epoch", () => {
+    const legacy = r({
+      trueVerseIndex: 1,
+      guessVerseIndex: 100,
+      distance: 99,
+      at: new Date(0).toISOString(),
+    });
+    const current = r({
+      trueVerseIndex: 1,
+      guessVerseIndex: 3,
+      distance: 2,
+      at: "2026-07-10T12:00:00.000Z",
+    });
+    const state = {
+      ...emptyState(),
+      practiceLog: [legacy, current],
+      rollups: foldRoundsIntoRollups({}, [legacy]),
+    };
+
+    expect(computeDistanceTrend(state)).toEqual([
+      {
+        month: "2026-07",
+        granularity: "month",
+        rounds: 1,
+        medianDistance: 2,
+        avgDistance: 2,
       },
     ]);
   });

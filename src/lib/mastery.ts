@@ -190,8 +190,14 @@ function expandHist(hist: number[]): number[] {
  */
 export function computeDistanceTrend(state: AppState): DistanceTrendPoint[] {
   const byMonth = new Map<string, number[]>();
+  // Legacy rounds without timestamps were normalized to the Unix epoch.
+  // They still count toward lifetime mastery, but cannot belong on a timeline.
+  const isDatedMonth = (month: string) => {
+    const match = /^(\d{4})-(\d{2})$/.exec(month);
+    return match != null && Number(match[1]) >= 2000;
+  };
   const add = (month: string, distances: number[]) => {
-    if (!distances.length) return;
+    if (!distances.length || !isDatedMonth(month)) return;
     const bucket = byMonth.get(month) ?? [];
     bucket.push(...distances);
     byMonth.set(month, bucket);
@@ -203,6 +209,8 @@ export function computeDistanceTrend(state: AppState): DistanceTrendPoint[] {
     }
   }
   for (const round of collectScoredRounds(state)) {
+    const timestamp = Date.parse(round.at);
+    if (!Number.isFinite(timestamp) || timestamp <= 0) continue;
     add(monthKeyFromAt(round.at), [effectiveDistance(round)]);
   }
 
