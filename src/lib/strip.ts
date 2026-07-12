@@ -86,16 +86,11 @@ const OVERVIEW_LABEL_BASE_FLOOR: Record<Orientation, number> = {
   vertical: 14,
 };
 
-/** Absolute min gap at the reference free-band length. */
-const OVERVIEW_LABEL_BASE_GAP: Record<Orientation, number> = {
-  horizontal: 10,
-  vertical: 12,
-};
-
 /**
  * Floor for ordinary overview labels. Scales down on short free bands
  * (marker chrome after zoom-out) so Genesis / History don't vanish while
- * landmarks alone remain.
+ * landmarks alone remain. Gap stays fixed — easing it packs 9px names on
+ * top of each other.
  */
 export function overviewBookLabelFloor(
   orientation: Orientation,
@@ -109,18 +104,14 @@ export function overviewBookLabelFloor(
 }
 
 /**
- * Minimum spacing between overview book-name anchors. Scales with free-band
- * length so compressed phone overviews keep Epistle landmarks readable.
+ * Minimum spacing between overview book-name anchors.
+ * Sized for the 9px label face so neighbors don't collide; do not scale
+ * this down with free-band height.
  */
-export function overviewBookLabelMinGap(
-  orientation: Orientation,
-  axisPx: number
-): number {
-  const ref = OVERVIEW_LABEL_REF_AXIS[orientation];
-  const base = OVERVIEW_LABEL_BASE_GAP[orientation];
-  const min = orientation === "horizontal" ? 7 : 6;
-  const safeAxis = Math.max(1, axisPx);
-  return Math.max(min, base * Math.min(1, safeAxis / ref));
+export function overviewBookLabelMinGap(orientation: Orientation): number {
+  // Wide hangs labels below (tighter). Portrait: 12 keeps Joshua without
+  // crowding 1 Samuel / 1 Kings / 1 Chronicles, and keeps 9px names readable.
+  return orientation === "horizontal" ? 10 : 12;
 }
 
 /** Whether a book earns a name label on the overview rail. */
@@ -1752,9 +1743,7 @@ export class CanonStrip {
     /** Gap from rail edge to label (px). */
     const gap = 6;
     /** Minimum spacing between book-name anchors along the rail. */
-    // Scales with free-band length so a short phone overview (verse + dock
-    // chrome after zoom-out) still keeps Law / History / Epistle anchors.
-    const minGap = overviewBookLabelMinGap(vp.orientation, vp.axisPx);
+    const minGap = overviewBookLabelMinGap(vp.orientation);
 
     // Chapter labels own the precision view; avoid a competing book label.
     if (vp.span <= PRECISION_THRESHOLD) return;
