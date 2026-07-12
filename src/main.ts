@@ -1516,27 +1516,29 @@ function renderPlay(): void {
     strip.setProvisionalGuess(provisionalGuess);
   }
 
-  /* Board is laid out by the HUD mid row — resize + publish rail-cross. */
+  /* Board is laid out by the HUD mid row — resize + publish verse-band bottom. */
   chromeRo = new ResizeObserver(() => {
     syncChromeInsets();
   });
   chromeRo.observe(board);
   chromeRo.observe(hudMid);
+  chromeRo.observe(verseBand);
   requestAnimationFrame(() => syncChromeInsets());
 }
 
 /**
- * Keep wide guess-tools anchored under the rail. Board layout still comes
- * from the HUD mid row — this only publishes --rail-cross for CSS.
+ * Keep wide guess-tools anchored under the verse. Board layout still comes
+ * from the HUD mid row — this only publishes --verse-band-bottom for CSS.
  */
 function syncChromeInsets(): void {
   strip?.resize();
-  const board = document.querySelector(".board-wrap");
+  const verseBand = document.querySelector(".verse-band");
   const hud = document.querySelector<HTMLElement>(".hud");
-  if (!board || !hud) return;
-  const br = board.getBoundingClientRect();
-  const railCross = br.top + br.height * 0.5;
-  hud.style.setProperty("--rail-cross", `${railCross}px`);
+  if (!verseBand || !hud) return;
+  hud.style.setProperty(
+    "--verse-band-bottom",
+    `${verseBand.getBoundingClientRect().bottom}px`
+  );
 }
 
 function makeGuessInput(): HTMLElement {

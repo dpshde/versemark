@@ -50,14 +50,28 @@ const ACTIVE_NOTCH_LENGTH = 28;
 
 /**
  * Always keep these start-anchors on the full-canon overview even when the
- * book is short in pixels — otherwise Epistles vanish after Acts.
- * Spaced through the letters: Romans → Ephesians → Hebrews; Revelation closes.
+ * book is short in pixels — otherwise Epistles vanish after Acts, and History
+ * opens / closes as a blank band.
+ * History: Joshua → Ezra. Letters: Romans → Ephesians → Hebrews; Revelation closes.
  */
 export const OVERVIEW_LANDMARK_OSIS = new Set([
+  "JOS",
+  "EZR",
   "ROM",
   "EPH",
   "HEB",
   "REV",
+]);
+
+/**
+ * History "volume 2" books — skip so the overview keeps one label per arc
+ * (Joshua → 1 Samuel → 1 Kings → 1 Chronicles) instead of paired clutter.
+ */
+export const OVERVIEW_SKIP_OSIS = new Set([
+  "JDG",
+  "2SA",
+  "2KI",
+  "2CH",
 ]);
 
 /** Whether a book earns a name label on the overview rail. */
@@ -66,8 +80,11 @@ export function isOverviewBookLabelCandidate(
   osis: string,
   orientation: Orientation
 ): boolean {
+  if (OVERVIEW_SKIP_OSIS.has(osis)) return false;
   if (OVERVIEW_LANDMARK_OSIS.has(osis)) return true;
-  return lenPx >= (orientation === "horizontal" ? 22 : 14);
+  // Wide overview has room below the rail for denser History packing;
+  // portrait stays stricter so the left column doesn't crowd.
+  return lenPx >= (orientation === "horizontal" ? 12 : 14);
 }
 
 export interface OverviewLabelCandidate {
@@ -1553,17 +1570,21 @@ export class CanonStrip {
 
       const label = `${chapter.bookName} ${chapter.chapter}`.toUpperCase();
       if (isH) {
-        // Wide: always above the rail (pre-experiment).
+        // Wide: below the rail with the notch ruler (same side).
         const free = this.freeAxis();
         const labelX = Math.min(
           free.origin + free.length - 8,
           Math.max(free.origin + 8, p.x)
         );
-        const y = cross - thick / 2 - 6;
-        const available = Math.max(40, y - this.chrome.top - 4);
+        const y =
+          cross + thick / 2 + NOTCH_GAP + ACTIVE_NOTCH_LENGTH + 6;
+        const available = Math.max(
+          40,
+          (this.canvasH || h) - y - this.chrome.bottom - 4
+        );
         ctx.save();
         ctx.translate(labelX, y);
-        ctx.rotate(-Math.PI / 2);
+        ctx.rotate(Math.PI / 2);
         ctx.textAlign = "left";
         ctx.textBaseline = "middle";
         ctx.fillText(label, 0, 0, available);
@@ -1682,7 +1703,9 @@ export class CanonStrip {
     /** Gap from rail edge to label (px). */
     const gap = 6;
     /** Minimum spacing between book-name anchors along the rail. */
-    const minGap = isH ? 18 : 14;
+    // Wide hangs labels below (tighter). Portrait: 12 keeps Joshua without
+    // crowding 1 Samuel / 1 Kings / 1 Chronicles.
+    const minGap = isH ? 10 : 12;
 
     // Chapter labels own the precision view; avoid a competing book label.
     if (vp.span <= PRECISION_THRESHOLD) return;
@@ -1728,9 +1751,9 @@ export class CanonStrip {
       ctx.fillStyle = this.colors.ink2;
       ctx.save();
       if (isH) {
-        // Wide: always above the rail at book start, rotated −90°.
-        ctx.translate(c.p.x, c.p.y - thick / 2 - gap);
-        ctx.rotate(-Math.PI / 2);
+        // Wide: below the rail at book start (same side as precision notches).
+        ctx.translate(c.p.x, c.p.y + thick / 2 + gap);
+        ctx.rotate(Math.PI / 2);
         ctx.textAlign = "left";
         ctx.fillText(c.name.toUpperCase(), 0, 0);
       } else {
@@ -1905,7 +1928,7 @@ export class CanonStrip {
     this.drawSettledRefLabel(text, p, lifted);
   }
 
-  /** Wide: compact rotated reference at the pin (HEAD landscape behavior). */
+  /** Wide: compact rotated reference at the pin, above (notches/chapters own below). */
   private drawWidePinLabel(text: string, p: Point, lifted: boolean): void {
     const { ctx } = this;
     const offset = this.railThick() / 2 + NOTCH_GAP;

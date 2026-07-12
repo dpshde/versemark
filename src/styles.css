@@ -2091,7 +2091,8 @@ button:disabled {
 
   .guess-tools {
     position: fixed;
-    top: calc(var(--rail-cross, 50vh) + 52px);
+    /* Immediately beneath the verse — not under the rail */
+    top: var(--verse-band-bottom, 20vh);
     left: 50%;
     width: min(calc(100% - 2 * var(--hud-inline)), 30rem);
     transform: translateX(-50%);
