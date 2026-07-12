@@ -76,17 +76,69 @@ export const OVERVIEW_SKIP_OSIS = new Set([
   "2CH",
 ]);
 
+/** Reference free-band lengths the absolute floors / gaps were tuned against. */
+const OVERVIEW_LABEL_REF_AXIS: Record<Orientation, number> = {
+  horizontal: 680,
+  vertical: 600,
+};
+
+/** Absolute length floor at the reference free-band length. */
+const OVERVIEW_LABEL_BASE_FLOOR: Record<Orientation, number> = {
+  horizontal: 12,
+  vertical: 14,
+};
+
+/** Absolute min gap at the reference free-band length. */
+const OVERVIEW_LABEL_BASE_GAP: Record<Orientation, number> = {
+  horizontal: 10,
+  vertical: 12,
+};
+
+/**
+ * Floor for ordinary overview labels. Scales down on short free bands
+ * (marker chrome after zoom-out) so Genesis / History don't vanish while
+ * landmarks alone remain.
+ */
+export function overviewBookLabelFloor(
+  orientation: Orientation,
+  axisPx: number
+): number {
+  const ref = OVERVIEW_LABEL_REF_AXIS[orientation];
+  const base = OVERVIEW_LABEL_BASE_FLOOR[orientation];
+  const min = orientation === "horizontal" ? 8 : 7;
+  const safeAxis = Math.max(1, axisPx);
+  return Math.max(min, base * Math.min(1, safeAxis / ref));
+}
+
+/**
+ * Minimum spacing between overview book-name anchors. Scales with free-band
+ * length so compressed phone overviews keep Epistle landmarks readable.
+ */
+export function overviewBookLabelMinGap(
+  orientation: Orientation,
+  axisPx: number
+): number {
+  const ref = OVERVIEW_LABEL_REF_AXIS[orientation];
+  const base = OVERVIEW_LABEL_BASE_GAP[orientation];
+  const min = orientation === "horizontal" ? 7 : 6;
+  const safeAxis = Math.max(1, axisPx);
+  return Math.max(min, base * Math.min(1, safeAxis / ref));
+}
+
 /** Whether a book earns a name label on the overview rail. */
 export function isOverviewBookLabelCandidate(
   lenPx: number,
   osis: string,
-  orientation: Orientation
+  orientation: Orientation,
+  axisPx: number = OVERVIEW_LABEL_REF_AXIS[orientation]
 ): boolean {
   if (OVERVIEW_SKIP_OSIS.has(osis)) return false;
   if (OVERVIEW_LANDMARK_OSIS.has(osis)) return true;
   // Wide overview has room below the rail for denser History packing;
-  // portrait stays stricter so the left column doesn't crowd.
-  return lenPx >= (orientation === "horizontal" ? 12 : 14);
+  // portrait stays stricter so the left column doesn't crowd. Both floors
+  // ease on short free bands so zoom-out after placing a marker still
+  // shows Law / History / Prophets anchors.
+  return lenPx >= overviewBookLabelFloor(orientation, axisPx);
 }
 
 export interface OverviewLabelCandidate {
@@ -1741,9 +1793,9 @@ export class CanonStrip {
     /** Gap from rail edge to label (px). */
     const gap = 6;
     /** Minimum spacing between book-name anchors along the rail. */
-    // Wide hangs labels below (tighter). Portrait: 12 keeps Joshua without
-    // crowding 1 Samuel / 1 Kings / 1 Chronicles.
-    const minGap = isH ? 10 : 12;
+    // Scales with free-band length so a short phone overview (verse + dock
+    // chrome after zoom-out) still keeps Law / History / Epistle anchors.
+    const minGap = overviewBookLabelMinGap(vp.orientation, vp.axisPx);
 
     // Chapter labels own the precision view; avoid a competing book label.
     if (vp.span <= PRECISION_THRESHOLD) return;
@@ -1761,7 +1813,14 @@ export class CanonStrip {
       const lenPx = this.chPx(seg.startVerseIndex, seg.endVerseIndex + 1);
       // Keep short books quiet, but retain enough landmarks to navigate the
       // full-canon overview — including several through the Epistles.
-      if (!isOverviewBookLabelCandidate(lenPx, seg.osis, vp.orientation)) {
+      if (
+        !isOverviewBookLabelCandidate(
+          lenPx,
+          seg.osis,
+          vp.orientation,
+          vp.axisPx
+        )
+      ) {
         continue;
       }
       const p = this.railPoint(seg.startVerseIndex, w, h);

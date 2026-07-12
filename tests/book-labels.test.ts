@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { bookSegments, FULL_CANON_SPAN } from "../src/lib/axis";
 import {
   isOverviewBookLabelCandidate,
+  overviewBookLabelFloor,
+  overviewBookLabelMinGap,
   OVERVIEW_LANDMARK_OSIS,
   OVERVIEW_SKIP_OSIS,
   pickOverviewBookLabels,
@@ -10,12 +12,38 @@ import {
 /** Approximate portrait free-band length for a phone overview. */
 const PORTRAIT_AXIS_PX = 600;
 
-function lenPxFor(start: number, end: number): number {
-  return ((end - start + 1) / FULL_CANON_SPAN) * PORTRAIT_AXIS_PX;
+/**
+ * Typical portrait free band once verse + zoom + dock chrome appear after
+ * placing a marker (zoom in → zoom out). Previously collapsed labels here.
+ */
+const SHORT_PORTRAIT_AXIS_PX = 280;
+
+function lenPxFor(start: number, end: number, axisPx = PORTRAIT_AXIS_PX): number {
+  return ((end - start + 1) / FULL_CANON_SPAN) * axisPx;
 }
 
-function axisPxFor(verseIndex: number): number {
-  return ((verseIndex - 1) / FULL_CANON_SPAN) * PORTRAIT_AXIS_PX;
+function axisPxFor(verseIndex: number, axisPx = PORTRAIT_AXIS_PX): number {
+  return ((verseIndex - 1) / FULL_CANON_SPAN) * axisPx;
+}
+
+function pickForAxis(
+  axisPx: number,
+  orientation: "vertical" | "horizontal"
+): string[] {
+  const minGap = overviewBookLabelMinGap(orientation, axisPx);
+  const segs = bookSegments();
+  const candidates = segs
+    .map((seg) => ({
+      osis: seg.osis,
+      name: seg.name,
+      axis: axisPxFor(seg.startVerseIndex, axisPx),
+      lenPx: lenPxFor(seg.startVerseIndex, seg.endVerseIndex, axisPx),
+      landmark: OVERVIEW_LANDMARK_OSIS.has(seg.osis),
+    }))
+    .filter((c) =>
+      isOverviewBookLabelCandidate(c.lenPx, c.osis, orientation, axisPx)
+    );
+  return pickOverviewBookLabels(candidates, minGap).map((c) => c.osis);
 }
 
 describe("overview book labels", () => {
@@ -70,6 +98,33 @@ describe("overview book labels", () => {
     expect(isOverviewBookLabelCandidate(12, "1SA", "vertical")).toBe(false);
   });
 
+  it("eases the floor and gap on short free bands", () => {
+    expect(overviewBookLabelFloor("vertical", PORTRAIT_AXIS_PX)).toBe(14);
+    expect(overviewBookLabelMinGap("vertical", PORTRAIT_AXIS_PX)).toBe(12);
+    expect(overviewBookLabelFloor("vertical", SHORT_PORTRAIT_AXIS_PX)).toBeLessThan(
+      14
+    );
+    expect(overviewBookLabelMinGap("vertical", SHORT_PORTRAIT_AXIS_PX)).toBeLessThan(
+      12
+    );
+    // Genesis at short-band pixel length must still qualify.
+    const gen = bookSegments().find((s) => s.osis === "GEN")!;
+    const genPx = lenPxFor(
+      gen.startVerseIndex,
+      gen.endVerseIndex,
+      SHORT_PORTRAIT_AXIS_PX
+    );
+    expect(genPx).toBeLessThan(14);
+    expect(
+      isOverviewBookLabelCandidate(
+        genPx,
+        "GEN",
+        "vertical",
+        SHORT_PORTRAIT_AXIS_PX
+      )
+    ).toBe(true);
+  });
+
   it("wide packing keeps one History label per arc", () => {
     const AXIS = 680;
     const segs = bookSegments();
@@ -84,9 +139,12 @@ describe("overview book labels", () => {
         landmark: OVERVIEW_LANDMARK_OSIS.has(seg.osis),
       }))
       .filter((c) =>
-        isOverviewBookLabelCandidate(c.lenPx, c.osis, "horizontal")
+        isOverviewBookLabelCandidate(c.lenPx, c.osis, "horizontal", AXIS)
       );
-    const picked = pickOverviewBookLabels(candidates, 10);
+    const picked = pickOverviewBookLabels(
+      candidates,
+      overviewBookLabelMinGap("horizontal", AXIS)
+    );
     const history = new Set(
       segs.filter((s) => s.genre === "history").map((s) => s.osis)
     );
@@ -115,9 +173,12 @@ describe("overview book labels", () => {
         landmark: OVERVIEW_LANDMARK_OSIS.has(seg.osis),
       }))
       .filter((c) =>
-        isOverviewBookLabelCandidate(c.lenPx, c.osis, "vertical")
+        isOverviewBookLabelCandidate(c.lenPx, c.osis, "vertical", AXIS)
       );
-    const picked = pickOverviewBookLabels(candidates, 12);
+    const picked = pickOverviewBookLabels(
+      candidates,
+      overviewBookLabelMinGap("vertical", AXIS)
+    );
     const history = new Set(
       segs.filter((s) => s.genre === "history").map((s) => s.osis)
     );
@@ -129,6 +190,31 @@ describe("overview book labels", () => {
     );
     for (const skip of OVERVIEW_SKIP_OSIS) {
       expect(historyLabels).not.toContain(skip);
+    }
+  });
+
+  it("keeps Law and History anchors after zoom-out on a short free band", () => {
+    // Reproduces the post-zoom phone overview: verse + zoom chips + dock
+    // shrink the rail until absolute 14px floors left only landmarks + Psalms.
+    const labels = pickForAxis(SHORT_PORTRAIT_AXIS_PX, "vertical");
+    expect(labels).toEqual(
+      expect.arrayContaining([
+        "GEN",
+        "JOS",
+        "1SA",
+        "1KI",
+        "1CH",
+        "EZR",
+        "PSA",
+        "ISA",
+        "ROM",
+        "EPH",
+        "HEB",
+        "REV",
+      ])
+    );
+    for (const skip of OVERVIEW_SKIP_OSIS) {
+      expect(labels).not.toContain(skip);
     }
   });
 
