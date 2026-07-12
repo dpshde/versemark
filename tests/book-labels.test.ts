@@ -29,8 +29,8 @@ function axisPxFor(verseIndex: number, axisPx = PORTRAIT_AXIS_PX): number {
 function pickForAxis(
   axisPx: number,
   orientation: "vertical" | "horizontal"
-): string[] {
-  const minGap = overviewBookLabelMinGap(orientation, axisPx);
+): Array<{ osis: string; axis: number }> {
+  const minGap = overviewBookLabelMinGap(orientation);
   const segs = bookSegments();
   const candidates = segs
     .map((seg) => ({
@@ -43,7 +43,10 @@ function pickForAxis(
     .filter((c) =>
       isOverviewBookLabelCandidate(c.lenPx, c.osis, orientation, axisPx)
     );
-  return pickOverviewBookLabels(candidates, minGap).map((c) => c.osis);
+  return pickOverviewBookLabels(candidates, minGap).map((c) => ({
+    osis: c.osis,
+    axis: c.axis,
+  }));
 }
 
 describe("overview book labels", () => {
@@ -98,15 +101,16 @@ describe("overview book labels", () => {
     expect(isOverviewBookLabelCandidate(12, "1SA", "vertical")).toBe(false);
   });
 
-  it("eases the floor and gap on short free bands", () => {
+  it("eases the length floor on short free bands but keeps a readable gap", () => {
     expect(overviewBookLabelFloor("vertical", PORTRAIT_AXIS_PX)).toBe(14);
-    expect(overviewBookLabelMinGap("vertical", PORTRAIT_AXIS_PX)).toBe(12);
+    expect(overviewBookLabelMinGap("vertical")).toBe(12);
     expect(overviewBookLabelFloor("vertical", SHORT_PORTRAIT_AXIS_PX)).toBeLessThan(
       14
     );
-    expect(overviewBookLabelMinGap("vertical", SHORT_PORTRAIT_AXIS_PX)).toBeLessThan(
-      12
-    );
+    // Gap must stay large enough for the 9px label face — easing it caused
+    // overlapping names after the short-band floor fix.
+    expect(overviewBookLabelMinGap("vertical")).toBeGreaterThanOrEqual(12);
+    expect(overviewBookLabelMinGap("horizontal")).toBeGreaterThanOrEqual(10);
     // Genesis at short-band pixel length must still qualify.
     const gen = bookSegments().find((s) => s.osis === "GEN")!;
     const genPx = lenPxFor(
@@ -143,7 +147,7 @@ describe("overview book labels", () => {
       );
     const picked = pickOverviewBookLabels(
       candidates,
-      overviewBookLabelMinGap("horizontal", AXIS)
+      overviewBookLabelMinGap("horizontal")
     );
     const history = new Set(
       segs.filter((s) => s.genre === "history").map((s) => s.osis)
@@ -177,7 +181,7 @@ describe("overview book labels", () => {
       );
     const picked = pickOverviewBookLabels(
       candidates,
-      overviewBookLabelMinGap("vertical", AXIS)
+      overviewBookLabelMinGap("vertical")
     );
     const history = new Set(
       segs.filter((s) => s.genre === "history").map((s) => s.osis)
@@ -196,7 +200,8 @@ describe("overview book labels", () => {
   it("keeps Law and History anchors after zoom-out on a short free band", () => {
     // Reproduces the post-zoom phone overview: verse + zoom chips + dock
     // shrink the rail until absolute 14px floors left only landmarks + Psalms.
-    const labels = pickForAxis(SHORT_PORTRAIT_AXIS_PX, "vertical");
+    const picked = pickForAxis(SHORT_PORTRAIT_AXIS_PX, "vertical");
+    const labels = picked.map((c) => c.osis);
     expect(labels).toEqual(
       expect.arrayContaining([
         "GEN",
@@ -206,15 +211,18 @@ describe("overview book labels", () => {
         "1CH",
         "EZR",
         "PSA",
-        "ISA",
         "ROM",
-        "EPH",
-        "HEB",
-        "REV",
       ])
     );
     for (const skip of OVERVIEW_SKIP_OSIS) {
       expect(labels).not.toContain(skip);
+    }
+    // Readable spacing: neighbors must clear the portrait min gap.
+    const minGap = overviewBookLabelMinGap("vertical");
+    for (let i = 1; i < picked.length; i += 1) {
+      expect(picked[i]!.axis - picked[i - 1]!.axis).toBeGreaterThanOrEqual(
+        minGap
+      );
     }
   });
 
