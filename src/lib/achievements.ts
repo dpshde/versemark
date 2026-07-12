@@ -735,6 +735,31 @@ export function listAchievements(state: AppState): AchievementView[] {
 }
 
 /**
+ * Single locked goal nearest completion — featured above the unlocks list.
+ * Prefers highest progress; ties break toward the lower threshold.
+ */
+export function nextClosestAchievement(
+  list: readonly AchievementView[]
+): AchievementView | null {
+  let best: AchievementView | null = null;
+  for (const a of list) {
+    if (a.unlocked) continue;
+    if (!best) {
+      best = a;
+      continue;
+    }
+    const pa = a.progress ?? 0;
+    const pb = best.progress ?? 0;
+    if (pa > pb) {
+      best = a;
+    } else if (pa === pb && (a.threshold ?? 0) < (best.threshold ?? 0)) {
+      best = a;
+    }
+  }
+  return best;
+}
+
+/**
  * Unique drop-cap asset paths worth warming in the background.
  * Seed catalog + currently listed rows (open-ended rungs included).
  */

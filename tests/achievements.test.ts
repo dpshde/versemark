@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   evaluateAchievements,
   listAchievements,
+  nextClosestAchievement,
   effectiveLifetime,
   nextThreshold,
   thresholdsForLadder,
@@ -279,6 +280,44 @@ describe("evaluateAchievements", () => {
     // Open-ended: not an infinite dump
     expect(list.length).toBeGreaterThan(5);
     expect(list.length).toBeLessThan(200);
+  });
+
+  it("nextClosestAchievement picks the locked goal nearest completion", () => {
+    const s = state({
+      achievementUnlocks: {
+        "exact-once": { unlockedAt: "2026-08-02T00:00:00.000Z" },
+        "rounds-10": { unlockedAt: "2026-08-03T00:00:00.000Z" },
+      },
+      lifetime: {
+        ...emptyLifetime(),
+        exact: 8,
+        scoredRounds: 40,
+        near: 5,
+      },
+    });
+    const list = listAchievements(s);
+    const next = nextClosestAchievement(list);
+    expect(next?.unlocked).toBe(false);
+    // exact 8/10 = 80% beats rounds 40/50 = 80%? equal progress — lower threshold wins
+    // exact-10 threshold 10, rounds-50 threshold 50 → exact-10
+    expect(next?.id).toBe("exact-10");
+    expect(next?.progress).toBeCloseTo(0.8);
+  });
+
+  it("nextClosestAchievement is null when every listed row is unlocked", () => {
+    const list = [
+      {
+        id: "exact-once",
+        title: "Exact",
+        description: "",
+        unlocked: true,
+        unlockedAt: "2026-08-01T00:00:00.000Z",
+        dropCap: "",
+        metal: "bronze" as const,
+        progress: 1,
+      },
+    ];
+    expect(nextClosestAchievement(list)).toBeNull();
   });
 
   it("effectiveLifetime prefers higher of stored vs log-derived", () => {

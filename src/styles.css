@@ -1153,6 +1153,44 @@ button:disabled {
   line-height: 1.45;
 }
 
+/* Featured next-closest goal — same materials as Lifetime, one quiet focus */
+.achievement-next {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-sm) var(--space-md) var(--space-md);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+}
+
+.achievement-next .achievements-section-label {
+  margin: 0 0 2px;
+  color: var(--ink-2);
+}
+
+.achievements-next-log {
+  border-top: 0;
+}
+
+.achievements-next-log .achievement-row {
+  --dropcap-size: 4rem;
+  padding: var(--space-sm) 0 0;
+  border-bottom: 0;
+}
+
+.achievement-row.is-next .achievement-title {
+  color: var(--ink);
+}
+
+.achievement-row.is-next.is-locked .achievement-title {
+  color: var(--ink);
+  opacity: 1;
+}
+
+.achievement-row.is-next .achievement-progress {
+  margin-top: var(--space-sm);
+}
+
 /* Canon heat map — tested books warm by median miss */
 .mastery-map {
   position: relative;

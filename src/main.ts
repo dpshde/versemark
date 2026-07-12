@@ -57,11 +57,13 @@ import {
 } from "./lib/mastery";
 import {
   listAchievements,
+  nextClosestAchievement,
   unlockedCount,
   achievementDefForId,
   dropCapPath,
   dropCapPathsToPreload,
   type AchievementMetal,
+  type AchievementView,
 } from "./lib/achievements";
 import {
   applyTheme,
@@ -453,7 +455,26 @@ function renderAchievements(): void {
     body.append(focus);
   }
 
-  // —— Unlocks (open-ended ladders; total is visible goals, not a ceiling) ——
+  // —— Next closest locked goal, then the full unlocks log ——
+  const next = nextClosestAchievement(unlocks);
+  const base = import.meta.env.BASE_URL || "./";
+
+  if (next) {
+    const nextBlock = el("section", {
+      class: "achievement-next",
+      "aria-label": "Next closest achievement",
+    });
+    nextBlock.append(
+      el("h2", { class: "achievements-section-label", text: "Next" })
+    );
+    const nextList = el("ul", {
+      class: "achievements-log achievements-next-log",
+    });
+    nextList.append(makeAchievementRow(next, base, { featured: true }));
+    nextBlock.append(nextList);
+    body.append(nextBlock);
+  }
+
   body.append(
     el("h2", {
       class: "achievements-section-label",
@@ -466,68 +487,74 @@ function renderAchievements(): void {
     class: "achievements-log",
     "aria-label": "Achievement log",
   });
-  const base = import.meta.env.BASE_URL || "./";
   for (const a of unlocks) {
-    const li = el("li", {
-      class: a.unlocked
-        ? `achievement-row is-unlocked metal-${a.metal}`
-        : `achievement-row is-locked metal-${a.metal}`,
-    });
-    const frame = el("div", {
-      class: `achievement-dropcap-frame metal-${a.metal}`,
-      "aria-hidden": "true",
-    });
-    const cap = document.createElement("img");
-    cap.className = "achievement-dropcap";
-    cap.alt = "";
-    cap.width = 56;
-    cap.height = 56;
-    // Row height is driven by --dropcap-size in CSS
-    cap.decoding = "async";
-    cap.loading = "lazy";
-    bindDropCapSrc(cap, base, a.dropCap, a.metal);
-    frame.append(cap);
-    let meta = "Locked";
-    if (a.unlocked) {
-      const d = a.unlockedAt ? new Date(a.unlockedAt) : null;
-      meta =
-        d && Number.isFinite(d.getTime())
-          ? d.toLocaleDateString(undefined, {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })
-          : "Unlocked";
-    } else if (
-      a.threshold != null &&
-      a.current != null &&
-      a.threshold > 0
-    ) {
-      meta = `${a.current.toLocaleString()} / ${a.threshold.toLocaleString()}`;
-    }
-    const head = el("p", { class: "achievement-head" }, [
-      el("span", { class: "achievement-title", text: a.title }),
-    ]);
-    const desc = el("p", { class: "achievement-desc", text: a.description });
-    const metaLine = el("span", { class: "achievement-meta", text: meta });
-    const text = el("div", { class: "achievement-copy" });
-    text.append(head, desc, metaLine);
-    if (!a.unlocked && a.progress != null && a.progress > 0) {
-      const bar = el("div", { class: "achievement-progress" }, [
-        el("div", {
-          class: "achievement-progress-fill",
-          style: `width:${Math.round(a.progress * 100)}%`,
-        }),
-      ]);
-      text.append(bar);
-    }
-    li.append(frame, text);
-    log.append(li);
+    log.append(makeAchievementRow(a, base));
   }
   body.append(log);
 
   screen.append(body);
   app.append(screen);
+}
+
+function makeAchievementRow(
+  a: AchievementView,
+  base: string,
+  opts: { featured?: boolean } = {}
+): HTMLElement {
+  const classes = [
+    "achievement-row",
+    a.unlocked ? "is-unlocked" : "is-locked",
+    `metal-${a.metal}`,
+  ];
+  if (opts.featured) classes.push("is-next");
+  const li = el("li", { class: classes.join(" ") });
+  const frame = el("div", {
+    class: `achievement-dropcap-frame metal-${a.metal}`,
+    "aria-hidden": "true",
+  });
+  const cap = document.createElement("img");
+  cap.className = "achievement-dropcap";
+  cap.alt = "";
+  cap.width = opts.featured ? 72 : 56;
+  cap.height = opts.featured ? 72 : 56;
+  cap.decoding = "async";
+  cap.loading = opts.featured ? "eager" : "lazy";
+  bindDropCapSrc(cap, base, a.dropCap, a.metal);
+  frame.append(cap);
+
+  let meta = "Locked";
+  if (a.unlocked) {
+    const d = a.unlockedAt ? new Date(a.unlockedAt) : null;
+    meta =
+      d && Number.isFinite(d.getTime())
+        ? d.toLocaleDateString(undefined, {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+          })
+        : "Unlocked";
+  } else if (a.threshold != null && a.current != null && a.threshold > 0) {
+    meta = `${a.current.toLocaleString()} / ${a.threshold.toLocaleString()}`;
+  }
+
+  const head = el("p", { class: "achievement-head" }, [
+    el("span", { class: "achievement-title", text: a.title }),
+  ]);
+  const desc = el("p", { class: "achievement-desc", text: a.description });
+  const metaLine = el("span", { class: "achievement-meta", text: meta });
+  const text = el("div", { class: "achievement-copy" });
+  text.append(head, desc, metaLine);
+  if (!a.unlocked && a.progress != null && (a.progress > 0 || opts.featured)) {
+    const bar = el("div", { class: "achievement-progress" }, [
+      el("div", {
+        class: "achievement-progress-fill",
+        style: `width:${Math.round(Math.max(0, a.progress) * 100)}%`,
+      }),
+    ]);
+    text.append(bar);
+  }
+  li.append(frame, text);
+  return li;
 }
 
 function masteryAriaLabel(
