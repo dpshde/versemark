@@ -7,6 +7,8 @@
   color-scheme: light;
 
   --bg: oklch(0.985 0.003 50);
+  /* Transparent stop matching --bg (avoid keyword `transparent` → black midtones) */
+  --bg-0: oklch(0.985 0.003 50 / 0);
   --surface: oklch(0.972 0.004 50);
   --surface-2: oklch(0.945 0.006 50);
   --rail: oklch(0.93 0.005 50);
@@ -75,6 +77,7 @@
     color-scheme: dark;
 
     --bg: oklch(0.16 0.004 48);
+    --bg-0: oklch(0.16 0.004 48 / 0);
     --surface: oklch(0.20 0.005 48);
     --surface-2: oklch(0.25 0.006 48);
     --rail: oklch(0.28 0.006 48);
@@ -110,6 +113,7 @@
   color-scheme: dark;
 
   --bg: oklch(0.16 0.004 48);
+  --bg-0: oklch(0.16 0.004 48 / 0);
   --surface: oklch(0.20 0.005 48);
   --surface-2: oklch(0.25 0.006 48);
   --rail: oklch(0.28 0.006 48);
@@ -728,7 +732,7 @@ button:disabled {
     to top,
     var(--bg) 0%,
     var(--bg) 40%,
-    transparent 100%
+    var(--bg-0) 100%
   );
 }
 
@@ -964,7 +968,7 @@ button:disabled {
     to bottom,
     var(--bg) 0%,
     var(--bg) 55%,
-    transparent 100%
+    var(--bg-0) 100%
   );
   margin: 0 calc(var(--space-sm) * -1);
   padding-inline: var(--space-sm);
@@ -2086,7 +2090,7 @@ button:disabled {
     to top,
     var(--bg) 0%,
     var(--bg) 65%,
-    transparent 100%
+    var(--bg-0) 100%
   );
   margin-bottom: 0;
 }
