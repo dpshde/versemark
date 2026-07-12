@@ -707,7 +707,7 @@ button:disabled {
   transform: translate(20px, -50%);
 }
 
-/* Place phase: reclaim rail height — clamp verse, compact dock.
+/* Place phase / zoomed-out overview: reclaim rail height — clamp verse, compact dock.
  * Long verses also clamp when the player collapses via the expand chevron. */
 .hud[data-has-marker="false"] .card,
 .hud:not([data-verse-expanded="true"]) .card {
@@ -724,8 +724,9 @@ button:disabled {
   line-height: 1.4;
 }
 
-.hud[data-has-marker="false"] .dock {
-  /* Place phase: no Confirm/Hint yet — keep only a thin fade under the rail */
+.hud[data-has-marker="false"] .dock,
+.hud[data-refine="false"] .dock {
+  /* No Confirm/Hint/type footer — keep only a thin fade under the rail */
   padding-top: 0;
   gap: 0;
   background: linear-gradient(
@@ -2105,6 +2106,10 @@ button:disabled {
   margin-inline: auto;
   width: 100%;
   padding-bottom: var(--space-xs);
+}
+
+.hint-panel[hidden] {
+  display: none !important;
 }
 
 .hint-panel .paragraph {

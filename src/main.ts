@@ -1633,6 +1633,7 @@ function renderPlay(): void {
 
   const dock = el("div", { class: "dock" });
   hud.dataset.hasMarker = hasMarker ? "true" : "false";
+  hud.dataset.refine = "false";
 
   /* Hints sit under the timeline, above readout / actions */
   const hintPanel = makeHintPanel(round);
@@ -1757,7 +1758,13 @@ function renderPlay(): void {
     strip.lockGuess();
     strip.reveal(round.poolItem.verseIndex);
   } else if (provisionalGuess != null) {
-    strip.setProvisionalGuess(provisionalGuess);
+    // Hint / translation rebuilds should return to refine (input footer), not
+    // leave a marker on the overview with the dock stripped.
+    if (round.phase === "playing") {
+      strip.focusGuessFromText(provisionalGuess);
+    } else {
+      strip.setProvisionalGuess(provisionalGuess);
+    }
   }
 
   /* Board is laid out by the HUD mid row — resize + publish verse-band bottom. */
@@ -1768,6 +1775,7 @@ function renderPlay(): void {
   chromeRo.observe(hudMid);
   chromeRo.observe(verseBand);
   requestAnimationFrame(() => {
+    syncPlayStage();
     syncVerseExpandToggle();
     syncChromeInsets();
   });
@@ -2159,7 +2167,7 @@ function syncTimelineCue(): void {
   cue.classList.add("is-hidden", "is-refine");
 }
 
-/** Progressive disclosure: zoom + hint + type field after rough place lifts. */
+/** Progressive disclosure: zoom chips after rough place; input footer only while refining. */
 function syncPlayStage(): void {
   const hud = document.querySelector<HTMLElement>(".hud");
   if (!hud) return;
@@ -2168,20 +2176,33 @@ function syncPlayStage(): void {
   // they lift (precision zoom) or when already refining in verse precision.
   const roughPlacing =
     (strip?.isPlacing() ?? false) && !(strip?.isPrecisionView() ?? false);
-  const revealPlayChrome = hasMarker && !roughPlacing;
-  hud.dataset.hasMarker = revealPlayChrome ? "true" : "false";
+  const refining = strip?.isPrecisionView() ?? false;
+  // OT/NT/Book chips once a marker exists (and the finger has lifted).
+  const showMapChrome = hasMarker && !roughPlacing;
+  // Type / Hint / Confirm are refine-only — zooming out hides the dock footer
+  // so the rail reclaims height for overview book labels.
+  const showInputFooter = showMapChrome && refining;
+  hud.dataset.hasMarker = showMapChrome ? "true" : "false";
+  hud.dataset.refine = showInputFooter ? "true" : "false";
   const hintBtn = document.querySelector<HTMLButtonElement>("#btn-hint");
   if (hintBtn) {
-    hintBtn.hidden = !revealPlayChrome;
-    hintBtn.tabIndex = revealPlayChrome ? 0 : -1;
+    hintBtn.hidden = !showInputFooter;
+    hintBtn.tabIndex = showInputFooter ? 0 : -1;
   }
   const guessTools = document.querySelector<HTMLElement>(".guess-tools");
   if (guessTools) {
-    guessTools.hidden = !revealPlayChrome;
+    guessTools.hidden = !showInputFooter;
   }
   const playActions = document.querySelector<HTMLElement>("#play-actions");
   if (playActions) {
-    playActions.hidden = !revealPlayChrome;
+    playActions.hidden = !showInputFooter;
+  }
+  const hintPanel = document.querySelector<HTMLElement>("#hint-panel");
+  if (hintPanel) {
+    hintPanel.hidden = !showInputFooter;
+  }
+  if (!showInputFooter && guessInputFocused) {
+    document.querySelector<HTMLInputElement>("#guess-input")?.blur();
   }
   requestAnimationFrame(() => {
     syncVerseExpandToggle();
