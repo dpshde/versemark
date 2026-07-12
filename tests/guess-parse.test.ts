@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   parseGuessText,
   progressiveInsertText,
+  resolveBookGuess,
   suggestGuessPassages,
 } from "../src/lib/guess-parse";
 import { verseIndexFor } from "../src/lib/books";
@@ -40,6 +41,57 @@ describe("parseGuessText (grab-bcv)", () => {
     expect(parseGuessText("").ok).toBe(false);
     expect(parseGuessText("   ").ok).toBe(false);
     expect(parseGuessText("not a verse").ok).toBe(false);
+  });
+});
+
+describe("resolveBookGuess", () => {
+  it("resolves full book names", () => {
+    const r = resolveBookGuess("John");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.osis).toBe("JHN");
+    expect(r.name).toBe("John");
+    expect(r.startVerseIndex).toBe(verseIndexFor("JHN", 1, 1));
+  });
+
+  it("resolves unambiguous abbreviations", () => {
+    const gen = resolveBookGuess("Gen");
+    expect(gen.ok).toBe(true);
+    if (gen.ok) expect(gen.osis).toBe("GEN");
+
+    const mt = resolveBookGuess("Mt");
+    expect(mt.ok).toBe(true);
+    if (mt.ok) expect(mt.osis).toBe("MAT");
+  });
+
+  it("trims trailing space after progressive book insert", () => {
+    const r = resolveBookGuess("Romans ");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.osis).toBe("ROM");
+  });
+
+  it("resolves numbered books and compact abbreviations", () => {
+    const john = resolveBookGuess("1 John");
+    expect(john.ok).toBe(true);
+    if (john.ok) expect(john.osis).toBe("1JN");
+
+    const cor = resolveBookGuess("1Cor");
+    expect(cor.ok).toBe(true);
+    if (cor.ok) expect(cor.osis).toBe("1CO");
+  });
+
+  it("resolves unambiguous prefixes, not ambiguous ones", () => {
+    expect(resolveBookGuess("Joh").ok).toBe(true);
+    expect(resolveBookGuess("J").ok).toBe(false);
+    expect(resolveBookGuess("Jo").ok).toBe(false);
+  });
+
+  it("rejects chapter drafts and empty input", () => {
+    expect(resolveBookGuess("John 3").ok).toBe(false);
+    expect(resolveBookGuess("Romans 8:1").ok).toBe(false);
+    expect(resolveBookGuess("").ok).toBe(false);
+    expect(resolveBookGuess("not a verse").ok).toBe(false);
   });
 });
 

@@ -11,6 +11,7 @@ import {
   VERSES_PER_CHAPTER,
 } from "./scoring";
 import {
+  monthKeyFromAt,
   type AppState,
   type BookRollup,
   type MonthlyRollups,
@@ -60,6 +61,15 @@ export interface MasteryReport {
   weakGenres: MasterySlice[];
   weakBooks: MasterySlice[];
   worstRounds: WorstRoundLine[];
+}
+
+export interface DistanceTrendPoint {
+  /** Start of the local calendar period, YYYY-MM. */
+  month: string;
+  granularity: "month" | "quarter" | "year";
+  rounds: number;
+  medianDistance: number;
+  avgDistance: number;
 }
 
 /** Chapters-off scale where heat saturates (~200 chapters). */
@@ -172,6 +182,65 @@ function expandHist(hist: number[]): number[] {
     for (let k = 0; k < count; k++) out.push(rep);
   }
   return out;
+}
+
+/**
+ * Monthly all-time distance trend. Recent rounds are exact; evicted rounds use
+ * the same histogram representatives as all-time mastery.
+ */
+export function computeDistanceTrend(state: AppState): DistanceTrendPoint[] {
+  const byMonth = new Map<string, number[]>();
+  const add = (month: string, distances: number[]) => {
+    if (!distances.length) return;
+    const bucket = byMonth.get(month) ?? [];
+    bucket.push(...distances);
+    byMonth.set(month, bucket);
+  };
+
+  for (const [month, books] of Object.entries(state.rollups ?? {})) {
+    for (const rollup of Object.values(books)) {
+      add(month, expandHist(rollup.hist ?? []));
+    }
+  }
+  for (const round of collectScoredRounds(state)) {
+    add(monthKeyFromAt(round.at), [effectiveDistance(round)]);
+  }
+
+  const months = [...byMonth.keys()].sort();
+  if (!months.length) return [];
+  const ordinal = (month: string) => {
+    const [year, monthNumber] = month.split("-").map(Number);
+    return year! * 12 + monthNumber! - 1;
+  };
+  const span = ordinal(months[months.length - 1]!) - ordinal(months[0]!) + 1;
+  const granularity: DistanceTrendPoint["granularity"] =
+    span <= 24 ? "month" : span <= 72 ? "quarter" : "year";
+  const periodKey = (month: string) => {
+    if (granularity === "month") return month;
+    const [year, monthNumber] = month.split("-").map(Number);
+    if (granularity === "year") return `${year}-01`;
+    const quarterStart = Math.floor((monthNumber! - 1) / 3) * 3 + 1;
+    return `${year}-${String(quarterStart).padStart(2, "0")}`;
+  };
+  const byPeriod = new Map<string, number[]>();
+  for (const [month, distances] of byMonth) {
+    const key = periodKey(month);
+    const bucket = byPeriod.get(key) ?? [];
+    bucket.push(...distances);
+    byPeriod.set(key, bucket);
+  }
+
+  return [...byPeriod.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([month, distances]) => ({
+      month,
+      granularity,
+      rounds: distances.length,
+      medianDistance: median(distances),
+      avgDistance:
+        distances.reduce((sum, distance) => sum + distance, 0) /
+        distances.length,
+    }));
 }
 
 function bookMeta(osis: string): { name: string; genre: Genre } | null {

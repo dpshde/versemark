@@ -8,6 +8,7 @@ import {
   VERSES_PER_CHAPTER,
 } from "../src/lib/scoring";
 import {
+  computeDistanceTrend,
   computeMastery,
   median,
 } from "../src/lib/mastery";
@@ -288,5 +289,24 @@ describe("mastery rollup median merge", () => {
     // Median of [0,0,2,rep,rep,rep] — within far bucket band
     expect(heat!.medianDistance).toBeLessThanOrEqual(farRep);
     expect(heat!.medianDistance).toBeGreaterThanOrEqual(0);
+  });
+
+  it("keeps evicted and recent rounds in their original trend months", () => {
+    const august = practiceRound(1, 100, "2026-08-01T12:00:00.000Z");
+    const september = practiceRound(1, 2, "2026-09-01T12:00:00.000Z");
+    const state = {
+      ...emptyAppState(),
+      practiceLog: [september],
+      practiceRounds: 2,
+      rollups: foldRoundsIntoRollups({}, [august]),
+    };
+
+    const trend = computeDistanceTrend(state);
+    expect(trend.map((point) => point.month)).toEqual(["2026-08", "2026-09"]);
+    expect(trend.map((point) => point.rounds)).toEqual([1, 1]);
+    expect(trend[0]!.medianDistance).toBe(
+      DIST_BUCKET_REPS[bucketForDistance(100)]
+    );
+    expect(trend[1]!.medianDistance).toBe(2);
   });
 });

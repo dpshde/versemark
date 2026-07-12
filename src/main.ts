@@ -17,12 +17,13 @@ import {
   type TextBundle,
 } from "./lib/game";
 import { CanonStrip } from "./lib/strip";
-import { formatVerseLabel } from "./lib/books";
+import { formatVerseLabel, BOOKS } from "./lib/books";
 import { bookSegments, bookSegmentAtT, testamentSeamT, type ZoomPreset } from "./lib/axis";
 import { shareText } from "./lib/share";
 import {
   parseGuessText,
   progressiveInsertText,
+  resolveBookGuess,
   suggestGuessPassages,
   type GuessSuggestion,
 } from "./lib/guess-parse";
@@ -44,6 +45,7 @@ import {
 } from "./lib/storage";
 import {
   computeMastery,
+  computeDistanceTrend,
   formatMiss,
   masteryHeatColor,
   booksForFocusMode,
@@ -54,6 +56,7 @@ import {
   type MasteryFocusMode,
   type MasteryReport,
   type MasterySlice,
+  type DistanceTrendPoint,
 } from "./lib/mastery";
 import {
   listAchievements,
@@ -93,6 +96,10 @@ let guessInputFocused = false;
 /** Invalid text must never confirm a stale marker that happens to remain on the rail. */
 let guessInputInvalid = false;
 let scoreToBeat: number | null = null;
+/** Verse band expanded past the 3-line clamp (long verses only). */
+let verseExpanded = false;
+/** Player toggled expand/collapse — don't auto-expand on marker again. */
+let verseExpandUserSet = false;
 
 function activeTexts(): TextBundle {
   return textsByTranslation[translation];
@@ -368,6 +375,7 @@ function renderAchievements(): void {
   markAchievementsSeen();
   const state = loadState();
   const mastery = computeMastery(state);
+  const distanceTrend = computeDistanceTrend(state);
   const unlocks = listAchievements(state);
   const counts = unlockedCount(state);
 
@@ -491,9 +499,174 @@ function renderAchievements(): void {
     log.append(makeAchievementRow(a, base));
   }
   body.append(log);
+  if (mastery.totalRounds > 0) {
+    body.append(makeDistanceTrend(distanceTrend));
+  }
 
   screen.append(body);
   app.append(screen);
+}
+
+function trendPeriodLabel(point: DistanceTrendPoint): string {
+  const { month, granularity } = point;
+  const [year, monthNumber] = month.split("-").map(Number);
+  if (!year || !monthNumber) return month;
+  if (granularity === "year") return String(year);
+  if (granularity === "quarter") {
+    return `Q${Math.floor((monthNumber - 1) / 3) + 1} ${String(year).slice(-2)}`;
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    year: "2-digit",
+  }).format(new Date(year, monthNumber - 1, 1));
+}
+
+function makeDistanceTrend(points: DistanceTrendPoint[]): HTMLElement {
+  const panel = el("section", {
+    class: "distance-trend",
+    "aria-labelledby": "distance-trend-title",
+  });
+  const heading = el("div", { class: "distance-trend-heading" }, [
+    el("h2", {
+      class: "achievements-section-label",
+      id: "distance-trend-title",
+      text: "Distance over time",
+    }),
+    el("span", {
+      class: "distance-trend-note",
+      text: `${points[0]?.granularity ?? "month"}ly · closer to zero is better`,
+    }),
+  ]);
+  panel.append(heading);
+
+  const latest = points[points.length - 1];
+  if (!latest) return panel;
+
+  const width = 320;
+  const height = 104;
+  const left = 34;
+  const right = 60;
+  const top = 8;
+  const bottom = 23;
+  const plotWidth = width - left - right;
+  const plotHeight = height - top - bottom;
+  const maxDistance = Math.max(
+    1,
+    ...points.flatMap((point) => [point.medianDistance, point.avgDistance])
+  );
+  const monthOrdinal = (month: string) => {
+    const [year, monthNumber] = month.split("-").map(Number);
+    return year! * 12 + monthNumber! - 1;
+  };
+  const firstMonth = monthOrdinal(points[0]!.month);
+  const monthSpan = monthOrdinal(latest.month) - firstMonth;
+  const x = (index: number) =>
+    monthSpan === 0
+      ? left + plotWidth / 2
+      : left +
+        ((monthOrdinal(points[index]!.month) - firstMonth) / monthSpan) *
+          plotWidth;
+  const y = (distance: number) =>
+    top + plotHeight - (distance / maxDistance) * plotHeight;
+  const pathFor = (value: (point: DistanceTrendPoint) => number) =>
+    points
+      .map(
+        (point, index) =>
+          `${index === 0 ? "M" : "L"}${x(index).toFixed(1)} ${y(value(point)).toFixed(1)}`
+      )
+      .join(" ");
+
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.classList.add("distance-trend-chart");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute(
+    "aria-label",
+    `${latest.granularity}ly distance trend through ${trendPeriodLabel(latest)}. Latest median ${formatMiss(latest.medianDistance)}; average ${formatMiss(latest.avgDistance)}.`
+  );
+
+  for (const fraction of [0, 0.5, 1]) {
+    const gridY = top + fraction * plotHeight;
+    const line = document.createElementNS(ns, "line");
+    line.setAttribute("class", "distance-trend-grid");
+    line.setAttribute("x1", String(left));
+    line.setAttribute("x2", String(width - right));
+    line.setAttribute("y1", String(gridY));
+    line.setAttribute("y2", String(gridY));
+    svg.append(line);
+  }
+
+  const topLabel = document.createElementNS(ns, "text");
+  topLabel.setAttribute("class", "distance-trend-axis");
+  topLabel.setAttribute("x", "0");
+  topLabel.setAttribute("y", String(top + 4));
+  topLabel.textContent =
+    maxDistance < 20
+      ? `${Math.round(maxDistance)}v`
+      : `${Math.max(1, Math.round(maxDistance / 26))} ch`;
+  const zeroLabel = document.createElementNS(ns, "text");
+  zeroLabel.setAttribute("class", "distance-trend-axis");
+  zeroLabel.setAttribute("x", "0");
+  zeroLabel.setAttribute("y", String(top + plotHeight + 4));
+  zeroLabel.textContent = "exact";
+  svg.append(topLabel, zeroLabel);
+
+  for (const [className, value] of [
+    ["is-average", (point: DistanceTrendPoint) => point.avgDistance],
+    ["is-median", (point: DistanceTrendPoint) => point.medianDistance],
+  ] as const) {
+    const path = document.createElementNS(ns, "path");
+    path.setAttribute("class", `distance-trend-line ${className}`);
+    path.setAttribute("d", pathFor(value));
+    svg.append(path);
+    for (const [index, point] of points.entries()) {
+      const dot = document.createElementNS(ns, "circle");
+      dot.setAttribute("class", `distance-trend-dot ${className}`);
+      dot.setAttribute("cx", x(index).toFixed(1));
+      dot.setAttribute("cy", y(value(point)).toFixed(1));
+      dot.setAttribute("r", "2.4");
+      svg.append(dot);
+    }
+  }
+
+  const averageY = y(latest.avgDistance);
+  const medianY = y(latest.medianDistance);
+  const labels = [
+    { text: "Average", className: "is-average", y: averageY },
+    { text: "Median", className: "is-median", y: medianY },
+  ];
+  if (Math.abs(averageY - medianY) < 12) {
+    const upper = averageY <= medianY ? labels[0]! : labels[1]!;
+    const lower = upper === labels[0] ? labels[1]! : labels[0]!;
+    upper.y = Math.max(top + 4, upper.y - 6);
+    lower.y = Math.min(top + plotHeight, lower.y + 6);
+  }
+  for (const item of labels) {
+    const label = document.createElementNS(ns, "text");
+    label.setAttribute("class", `distance-trend-direct-label ${item.className}`);
+    label.setAttribute("x", String(width - right + 7));
+    label.setAttribute("y", String(item.y + 3));
+    label.textContent = item.text;
+    svg.append(label);
+  }
+
+  const labelIndexes = points.length === 1 ? [0] : [0, points.length - 1];
+  for (const index of labelIndexes) {
+    const label = document.createElementNS(ns, "text");
+    label.setAttribute("class", "distance-trend-month");
+    label.setAttribute("x", x(index).toFixed(1));
+    label.setAttribute("y", String(height - 4));
+    label.setAttribute(
+      "text-anchor",
+      points.length === 1 ? "middle" : index === 0 ? "start" : "end"
+    );
+    label.textContent = trendPeriodLabel(points[index]!);
+    svg.append(label);
+  }
+
+  panel.append(svg);
+  return panel;
 }
 
 function makeAchievementRow(
@@ -1270,6 +1443,11 @@ function setTranslation(next: TranslationId): void {
       btn.classList.toggle("is-active", id === translation);
       btn.setAttribute("aria-pressed", id === translation ? "true" : "false");
     });
+  // Translation swap can change wrap length — refresh expand toggle + rail inset.
+  requestAnimationFrame(() => {
+    syncVerseExpandToggle();
+    syncChromeInsets();
+  });
 }
 
 /** BSB / KJV segmented switch — same material as mastery focus. */
@@ -1393,9 +1571,43 @@ function renderPlay(): void {
   /* Verse band — same horizontal measure as the dock */
   const verseBand = el("div", { class: "verse-band" });
   const card = el("div", { class: "card", id: "verse-card" });
-  card.append(
-    el("p", { class: "verse", id: "verse-text", text: round.verseText })
-  );
+  verseExpandUserSet = false;
+  // Long verses start fully open; player collapses to reclaim timeline.
+  verseExpanded = true;
+  hud.dataset.verseExpanded = "true";
+  const verseText = el("p", {
+    class: "verse",
+    id: "verse-text",
+    text: round.verseText,
+  });
+  const verseExpand = el("button", {
+    type: "button",
+    class: "verse-expand",
+    id: "verse-expand",
+    "aria-expanded": "true",
+    "aria-controls": "verse-text",
+    "aria-label": "Collapse verse",
+    hidden: "true",
+  });
+  const verseChevron = el("span", {
+    class: "verse-expand-chevron",
+    "aria-hidden": "true",
+  });
+  verseChevron.innerHTML = `<svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/></svg>`;
+  verseExpand.append(verseChevron);
+  const toggleVerseExpand = () => {
+    const toggle = document.querySelector<HTMLButtonElement>("#verse-expand");
+    if (!toggle || toggle.hidden) return;
+    hapticLight();
+    verseExpandUserSet = true;
+    setVerseExpanded(!verseExpanded);
+  };
+  verseText.addEventListener("click", toggleVerseExpand);
+  verseExpand.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleVerseExpand();
+  });
+  card.append(verseText, verseExpand);
   verseBand.append(card);
   hud.append(verseBand);
 
@@ -1433,7 +1645,7 @@ function renderPlay(): void {
     guessTools.append(makePrecisionZoomOut(), makeGuessInput());
     dock.append(guessTools);
 
-    const actions = el("div", { class: "actions" });
+    const actions = el("div", { class: "actions", id: "play-actions" });
     const hintBtn = el("button", {
       class: "btn-secondary",
       type: "button",
@@ -1477,6 +1689,8 @@ function renderPlay(): void {
         : guessInputInvalid
           ? "Fix the reference before confirming"
           : "Lock in your guess";
+    // No selection yet — drop the whole action row so the rail owns the height.
+    if (!hasMarker) actions.hidden = true;
     confirm.addEventListener("click", () => {
       if (!round || provisionalGuess == null) return;
       // Prefer whatever is currently typed if it parses
@@ -1522,8 +1736,11 @@ function renderPlay(): void {
     syncPlayStage();
     const zoomBar = document.querySelector<HTMLElement>(".zoom-bar");
     if (zoomBar) syncZoomBarUI(zoomBar);
-    // Verse may grow when the place-phase clamp lifts — remeasure free band.
-    requestAnimationFrame(() => syncChromeInsets());
+    // Verse may grow when expand lifts the clamp — remeasure free band.
+    requestAnimationFrame(() => {
+      syncVerseExpandToggle();
+      syncChromeInsets();
+    });
   });
   strip.setOnGuessCommit(() => {
     document.querySelector<HTMLButtonElement>("#btn-confirm")?.click();
@@ -1550,7 +1767,10 @@ function renderPlay(): void {
   chromeRo.observe(board);
   chromeRo.observe(hudMid);
   chromeRo.observe(verseBand);
-  requestAnimationFrame(() => syncChromeInsets());
+  requestAnimationFrame(() => {
+    syncVerseExpandToggle();
+    syncChromeInsets();
+  });
 }
 
 /**
@@ -1566,6 +1786,89 @@ function syncChromeInsets(): void {
     "--verse-band-bottom",
     `${verseBand.getBoundingClientRect().bottom}px`
   );
+}
+
+/** Apply expand/collapse to the verse band and keep the toggle labeled. */
+function setVerseExpanded(next: boolean): void {
+  verseExpanded = next;
+  const hud = document.querySelector<HTMLElement>(".hud");
+  const toggle = document.querySelector<HTMLButtonElement>("#verse-expand");
+  if (hud) hud.dataset.verseExpanded = next ? "true" : "false";
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", next ? "true" : "false");
+    toggle.setAttribute(
+      "aria-label",
+      next ? "Collapse verse" : "Expand verse"
+    );
+  }
+  requestAnimationFrame(() => {
+    syncVerseExpandToggle();
+    syncChromeInsets();
+  });
+}
+
+/**
+ * Show the expand chevron only when the verse overflows the 3-line clamp.
+ * Probes full wrap height via a hidden clone — line-clamp makes scrollHeight
+ * unreliable on the live node (often equals clientHeight when clamped).
+ */
+function syncVerseExpandToggle(): void {
+  const hud = document.querySelector<HTMLElement>(".hud");
+  const verse = document.querySelector<HTMLElement>("#verse-text");
+  const toggle = document.querySelector<HTMLButtonElement>("#verse-expand");
+  if (!hud || !verse || !toggle) return;
+  // Not laid out yet — don't treat as "short" or we clamp long verses away.
+  if (verse.clientWidth <= 0) return;
+
+  const overflows = verseOverflowsClamp(verse);
+  toggle.hidden = !overflows;
+  verse.classList.toggle("is-toggleable", overflows);
+
+  const expanded = hud.dataset.verseExpanded === "true";
+  if (!overflows && expanded) {
+    // Short enough at this size — drop expanded chrome so the rail keeps height.
+    verseExpanded = false;
+    hud.dataset.verseExpanded = "false";
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.setAttribute("aria-label", "Expand verse");
+  } else if (overflows && !verseExpandUserSet && !expanded) {
+    // Default open for long verses once measurement is reliable.
+    verseExpanded = true;
+    hud.dataset.verseExpanded = "true";
+    toggle.setAttribute("aria-expanded", "true");
+    toggle.setAttribute("aria-label", "Collapse verse");
+  }
+}
+
+/** True when verse text needs more than the collapsed 3-line budget. */
+function verseOverflowsClamp(verse: HTMLElement): boolean {
+  const rootPx =
+    parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const collapsedMax = rootPx * 1.02 * 1.4 * 3 + 2;
+  const width = verse.clientWidth;
+  if (width <= 0) return false;
+
+  const probe = verse.cloneNode(true) as HTMLElement;
+  probe.removeAttribute("id");
+  probe.setAttribute("aria-hidden", "true");
+  probe.style.cssText = [
+    "position:absolute",
+    "visibility:hidden",
+    "pointer-events:none",
+    "inset:auto auto auto 0",
+    `width:${width}px`,
+    "display:block",
+    "-webkit-line-clamp:unset",
+    "line-clamp:unset",
+    "overflow:visible",
+    "height:auto",
+    "max-height:none",
+    "margin:0",
+  ].join(";");
+  verse.parentElement!.appendChild(probe);
+  const fullHeight = probe.scrollHeight;
+  probe.remove();
+  return fullHeight > collapsedMax;
 }
 
 function makeGuessInput(): HTMLElement {
@@ -1612,6 +1915,19 @@ function makeGuessInput(): HTMLElement {
 
   let suggestions: GuessSuggestion[] = [];
   let activeSuggestion = -1;
+  /** Last book zoomed via autocomplete selection (skip redundant jumps). */
+  let lastBookZoomOsis: string | null = null;
+
+  const zoomTimelineToBook = (osis: string): void => {
+    if (osis === lastBookZoomOsis && activeZoom === "book") return;
+    const book = BOOKS.find((b) => b.osis === osis);
+    if (!book) return;
+    lastBookZoomOsis = osis;
+    strip?.setZoomPreset("book", book.startVerseIndex);
+    activeZoom = "book";
+    const zoomBar = document.querySelector<HTMLElement>(".zoom-bar");
+    if (zoomBar) syncZoomBarUI(zoomBar);
+  };
 
   const setValidity = (state: "empty" | "valid" | "invalid"): void => {
     wrap.classList.toggle("is-valid", state === "valid");
@@ -1706,11 +2022,18 @@ function makeGuessInput(): HTMLElement {
       setValidity("valid");
       syncConfirmEnabled();
       syncTimelineCue();
+      syncPlayStage();
       return;
     }
     if (parsed.reason === "empty") {
       setValidity("empty");
       // Keep timeline marker; empty field is fine while still deciding
+      syncConfirmEnabled();
+      return;
+    }
+    // Book-only draft is fine — no error — but zoom waits for autocomplete pick.
+    if (resolveBookGuess(raw).ok) {
+      setValidity("empty");
       syncConfirmEnabled();
       return;
     }
@@ -1725,6 +2048,10 @@ function makeGuessInput(): HTMLElement {
     const suggestion = suggestions[index];
     if (!suggestion) return;
     input.value = progressiveInsertText(suggestion);
+    // Selecting a book from the list zooms the rail to that book.
+    if (suggestion.kind === "book") {
+      zoomTimelineToBook(suggestion.canonical);
+    }
     applyFromInput(false);
     refreshSuggestions();
     // Keep caret at end for continued typing (chapter/verse after book)
@@ -1852,6 +2179,14 @@ function syncPlayStage(): void {
   if (guessTools) {
     guessTools.hidden = !revealPlayChrome;
   }
+  const playActions = document.querySelector<HTMLElement>("#play-actions");
+  if (playActions) {
+    playActions.hidden = !revealPlayChrome;
+  }
+  requestAnimationFrame(() => {
+    syncVerseExpandToggle();
+    syncChromeInsets();
+  });
 }
 
 /** Push marker placement into the text field (unless the user is typing). */
@@ -2093,8 +2428,8 @@ function syncZoomBarUI(bar: HTMLElement): void {
     b.classList.toggle("is-active", on);
     b.setAttribute("aria-pressed", on ? "true" : "false");
     if (id === "book") {
-      const ready = provisionalGuess != null;
-      b.disabled = !ready;
+      const ready = provisionalGuess != null || activeZoom === "book";
+      b.disabled = provisionalGuess == null && activeZoom !== "book";
       b.title = ready
         ? "Book under marker — tap again for full canon"
         : "Place a marker to use book zoom";
@@ -2113,7 +2448,6 @@ function syncZoomBarUI(bar: HTMLElement): void {
 }
 
 function applyZoomSelection(next: ZoomPreset | null): void {
-  if (next === "book" && provisionalGuess == null) return;
   // Zoom presets are mutually exclusive.
   // Re-selecting the active preset toggles zoom completely off.
   if (next != null && activeZoom === next) {
@@ -2121,6 +2455,7 @@ function applyZoomSelection(next: ZoomPreset | null): void {
     strip?.clearZoom();
     return;
   }
+  if (next === "book" && provisionalGuess == null) return;
   activeZoom = next;
   if (next == null) {
     strip?.clearZoom();
@@ -2145,11 +2480,11 @@ function makeZoomBar(): HTMLElement {
       title: p.title,
       "aria-pressed": activeZoom === p.id ? "true" : "false",
       "aria-label":
-        p.id === "book" && provisionalGuess == null
+        p.id === "book" && provisionalGuess == null && activeZoom !== "book"
           ? `${p.label} zoom — place a marker first`
           : p.label,
     });
-    if (p.id === "book" && provisionalGuess == null) {
+    if (p.id === "book" && provisionalGuess == null && activeZoom !== "book") {
       btn.disabled = true;
       btn.title = `Place a marker to use ${p.label.toLowerCase()} zoom`;
     }

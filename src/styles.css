@@ -703,27 +703,39 @@ button:disabled {
   transform: translate(20px, -50%);
 }
 
-/* Place phase: reclaim rail height — clamp verse, compact dock */
-.hud[data-has-marker="false"] .card {
-  padding-bottom: var(--space-sm);
+/* Place phase: reclaim rail height — clamp verse, compact dock.
+ * Long verses also clamp when the player collapses via the expand chevron. */
+.hud[data-has-marker="false"] .card,
+.hud:not([data-verse-expanded="true"]) .card {
+  padding-bottom: 0;
 }
 
-.hud[data-has-marker="false"] .card .verse {
+.hud:not([data-verse-expanded="true"]) .card .verse {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
   overflow: hidden;
   font-size: 1.02rem;
   line-height: 1.4;
 }
 
 .hud[data-has-marker="false"] .dock {
-  padding-top: var(--space-sm);
+  /* Place phase: no Confirm/Hint yet — keep only a thin fade under the rail */
+  padding-top: 0;
+  gap: 0;
+  background: linear-gradient(
+    to top,
+    var(--bg) 0%,
+    var(--bg) 40%,
+    transparent 100%
+  );
 }
 
-.hud[data-has-marker="true"] .card .verse {
+.hud[data-verse-expanded="true"] .card .verse {
   display: block;
   -webkit-line-clamp: unset;
+  line-clamp: unset;
   overflow: visible;
 }
 
@@ -944,7 +956,7 @@ button:disabled {
 /* Verse — in-flow, type only */
 .card {
   position: relative;
-  padding: var(--space-sm) 0 var(--space-lg);
+  padding: var(--space-sm) 0 var(--space-sm);
   text-align: center;
   pointer-events: none;
   /* Soft fade under type so rail labels don't fight long verses */
@@ -967,6 +979,59 @@ button:disabled {
   text-wrap: pretty;
   max-width: 58ch;
   margin-inline: auto;
+}
+
+/* Long verses: tap text or chevron to collapse and reclaim timeline */
+.card .verse.is-toggleable {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* Expand/collapse long verses so the timeline can reclaim height */
+.verse-expand {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  min-height: 0;
+  height: 1.25rem;
+  margin: var(--space-xs) auto 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  border-radius: 0;
+}
+
+.verse-expand:hover,
+.verse-expand:focus-visible {
+  color: var(--ink);
+}
+
+.verse-expand:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.verse-expand[hidden] {
+  display: none;
+}
+
+.verse-expand-chevron {
+  display: flex;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.hud[data-verse-expanded="true"] .verse-expand-chevron {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .verse-expand-chevron {
+    transition: none;
+  }
 }
 
 /* Translation switch — framed but quieter than mastery focus */
@@ -1151,6 +1216,89 @@ button:disabled {
   font-size: 0.88rem;
   color: var(--ink-2);
   line-height: 1.45;
+}
+
+.distance-trend {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-sm) var(--space-md) var(--space-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+}
+
+.distance-trend-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.distance-trend-heading .achievements-section-label {
+  margin: 0;
+}
+
+.distance-trend-note {
+  color: var(--ink-2);
+  font-size: 0.68rem;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.04em;
+}
+
+.distance-trend-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: var(--space-xs);
+  overflow: visible;
+}
+
+.distance-trend-grid {
+  stroke: var(--row-rule);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.distance-trend-line {
+  fill: none;
+  stroke: var(--success);
+  stroke-width: 2;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  vector-effect: non-scaling-stroke;
+}
+
+.distance-trend-line.is-average {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.distance-trend-dot {
+  fill: var(--surface);
+  stroke: var(--success);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.distance-trend-dot.is-average {
+  stroke: var(--accent);
+}
+
+.distance-trend-axis,
+.distance-trend-month,
+.distance-trend-direct-label {
+  fill: var(--ink-2);
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.distance-trend-direct-label {
+  fill: var(--success);
+  font-weight: 600;
+}
+
+.distance-trend-direct-label.is-average {
+  fill: var(--accent);
 }
 
 /* Featured next-closest goal — same materials as Lifetime, one quiet focus */
@@ -2175,6 +2323,10 @@ button:disabled {
   display: flex;
   gap: var(--space-sm);
   align-items: stretch;
+}
+
+.actions[hidden] {
+  display: none;
 }
 
 .actions .btn-secondary {

@@ -8,13 +8,23 @@ import {
   type AutocompletePassageSuggestion,
   type OsisBookCode,
 } from "grab-bcv";
-import { verseIndexFor, formatVerseLabel } from "./books";
+import { verseIndexFor, formatVerseLabel, BOOKS } from "./books";
 
 export type GuessParseResult =
   | { ok: true; verseIndex: number; label: string; input: string }
   | { ok: false; reason: "empty" | "invalid" | "out_of_range"; input: string };
 
 export type GuessSuggestion = AutocompletePassageSuggestion;
+
+export type BookGuessResult =
+  | {
+      ok: true;
+      osis: string;
+      name: string;
+      startVerseIndex: number;
+      input: string;
+    }
+  | { ok: false };
 
 /**
  * Parse a typed reference into a global verse index.
@@ -40,6 +50,43 @@ export function parseGuessText(raw: string): GuessParseResult {
     ok: true,
     verseIndex,
     label: formatVerseLabel(verseIndex),
+    input,
+  };
+}
+
+/**
+ * Resolve a book-only draft (exact name or unambiguous abbreviation).
+ * Used to keep the field from erroring while typing; zoom waits for autocomplete selection.
+ */
+export function resolveBookGuess(raw: string): BookGuessResult {
+  const input = raw.trim();
+  if (!input) return { ok: false };
+
+  // Chapter/verse drafts ("John 3", "Rom 8:1") — not book-only.
+  if (/\s+\d/.test(input) || /:/.test(input)) return { ok: false };
+
+  const suggestions = autocompletePassage(input, { limit: 8 }).filter(
+    (s) => s.kind === "book"
+  );
+  if (suggestions.length === 0) return { ok: false };
+
+  const normalized = input.toLowerCase();
+  const exact = suggestions.find(
+    (s) =>
+      s.insertText.toLowerCase() === normalized ||
+      s.label.toLowerCase() === normalized
+  );
+  const match = exact ?? (suggestions.length === 1 ? suggestions[0] : null);
+  if (!match) return { ok: false };
+
+  const book = BOOKS.find((b) => b.osis === match.canonical);
+  if (!book) return { ok: false };
+
+  return {
+    ok: true,
+    osis: book.osis,
+    name: book.name,
+    startVerseIndex: book.startVerseIndex,
     input,
   };
 }

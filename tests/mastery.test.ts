@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   effectiveDistance,
   computeMastery,
+  computeDistanceTrend,
   median,
   formatMiss,
   formatMissDistance,
@@ -88,6 +89,88 @@ describe("median", () => {
   it("is robust to a single huge outlier", () => {
     // Two small misses + one 24,999-verse miss → median stays small
     expect(median([2, 4, 24999])).toBe(4);
+  });
+});
+
+describe("computeDistanceTrend", () => {
+  it("groups recent rounds by month in chronological order", () => {
+    const state = {
+      ...emptyState(),
+      practiceLog: [
+        r({
+          trueVerseIndex: 1,
+          guessVerseIndex: 9,
+          distance: 8,
+          at: "2026-02-15T12:00:00.000Z",
+        }),
+        r({
+          trueVerseIndex: 1,
+          guessVerseIndex: 3,
+          distance: 2,
+          at: "2026-01-10T12:00:00.000Z",
+        }),
+        r({
+          trueVerseIndex: 1,
+          guessVerseIndex: 7,
+          distance: 6,
+          at: "2026-01-20T12:00:00.000Z",
+        }),
+      ],
+    };
+
+    expect(computeDistanceTrend(state)).toEqual([
+      {
+        month: "2026-01",
+        granularity: "month",
+        rounds: 2,
+        medianDistance: 4,
+        avgDistance: 4,
+      },
+      {
+        month: "2026-02",
+        granularity: "month",
+        rounds: 1,
+        medianDistance: 8,
+        avgDistance: 8,
+      },
+    ]);
+  });
+
+  it("coarsens long histories so the chart remains readable", () => {
+    const state = {
+      ...emptyState(),
+      practiceLog: [
+        r({
+          trueVerseIndex: 1,
+          guessVerseIndex: 3,
+          distance: 2,
+          at: "2020-01-10T12:00:00.000Z",
+        }),
+        r({
+          trueVerseIndex: 1,
+          guessVerseIndex: 9,
+          distance: 8,
+          at: "2026-01-10T12:00:00.000Z",
+        }),
+      ],
+    };
+
+    expect(computeDistanceTrend(state)).toEqual([
+      {
+        month: "2020-01",
+        granularity: "year",
+        rounds: 1,
+        medianDistance: 2,
+        avgDistance: 2,
+      },
+      {
+        month: "2026-01",
+        granularity: "year",
+        rounds: 1,
+        medianDistance: 8,
+        avgDistance: 8,
+      },
+    ]);
   });
 });
 
