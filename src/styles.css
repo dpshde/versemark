@@ -440,6 +440,17 @@ button:disabled {
   opacity: 1;
 }
 
+/* Dark soft well is deep; peach label washes out — keep white like enabled. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .btn-primary:disabled {
+    color: #fff;
+  }
+}
+
+:root[data-theme="dark"] .btn-primary:disabled {
+  color: #fff;
+}
+
 .btn-with-icon {
   display: inline-flex;
   align-items: center;

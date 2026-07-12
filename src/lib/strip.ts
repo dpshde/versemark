@@ -1438,11 +1438,11 @@ export class CanonStrip {
 
     const { ctx } = this;
     ctx.save();
-    // Genre bands are mid-light tints — dark ink needs solid weight to read.
+    // Light: dark ink on mid-light tints. Dark: soft white on mid-dark bands.
     ctx.font = `700 7.5px ${SERIF}`;
     ctx.fillStyle =
       resolvedTheme() === "dark"
-        ? "rgba(12, 10, 8, 0.72)"
+        ? "rgba(255, 255, 255, 0.82)"
         : "rgba(47, 42, 37, 0.42)";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
