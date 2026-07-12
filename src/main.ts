@@ -391,19 +391,20 @@ function renderAchievements(): void {
     hapticLight();
     renderHome();
   });
+  const topActions = el("div", { class: "chrome-top-actions" });
+  topActions.append(makeThemeToggle(), back);
   top.append(
     el("div", {
       class: "achievements-top-spacer",
       "aria-hidden": "true",
     }),
     el("h1", { class: "achievements-heading", text: "Achievements" }),
-    (() => {
-      const actions = el("div", { class: "achievements-top-actions" });
-      actions.append(makeThemeToggle(), back);
-      return actions;
-    })()
+    el("div", {
+      class: "achievements-top-spacer",
+      "aria-hidden": "true",
+    })
   );
-  screen.append(top);
+  screen.append(topActions, top);
 
   const body = el("div", { class: "achievements-body" });
 
@@ -1099,7 +1100,7 @@ function renderHome(): void {
     hapticLight();
     renderAchievements();
   });
-  const topActions = el("div", { class: "home-top-actions" });
+  const topActions = el("div", { class: "chrome-top-actions" });
   topActions.append(makeThemeToggle(), crown);
   screen.append(topActions);
 
@@ -1321,6 +1322,8 @@ function renderPlay(): void {
     round = null;
     renderHome();
   });
+  const topActions = el("div", { class: "chrome-top-actions" });
+  topActions.append(makeThemeToggle(), back);
   const dailyPosition = round.daily
     ? `${round.daily.index + 1}/${round.daily.items.length}`
     : null;
@@ -1353,12 +1356,12 @@ function renderPlay(): void {
     center.append(makeZoomBar());
   }
   center.append(makeTranslationChip());
-  top.append(back, center, mode);
+  top.append(center, mode);
 
-  /* Top chrome is one grid row (home + center + mode). */
+  /* Top chrome is one grid row (center + mode); theme/home share home's corner. */
   const chrome = el("div", { class: "hud-chrome" });
   chrome.append(top);
-  hud.append(chrome);
+  hud.append(topActions, chrome);
 
   /* Verse band — same horizontal measure as the dock */
   const verseBand = el("div", { class: "verse-band" });

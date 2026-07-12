@@ -48,6 +48,23 @@ const PRECISION_THRESHOLD = 180;
 const NOTCH_GAP = 8;
 const ACTIVE_NOTCH_LENGTH = 28;
 
+/**
+ * Always keep these start-anchors on the full-canon overview even when the
+ * book is short in pixels — otherwise Epistles vanish after Acts.
+ * Romans opens the letters; Revelation closes the canon.
+ */
+export const OVERVIEW_LANDMARK_OSIS = new Set(["ROM", "REV"]);
+
+/** Whether a book earns a name label on the overview rail. */
+export function isOverviewBookLabelCandidate(
+  lenPx: number,
+  osis: string,
+  orientation: Orientation
+): boolean {
+  if (OVERVIEW_LANDMARK_OSIS.has(osis)) return true;
+  return lenPx >= (orientation === "horizontal" ? 22 : 14);
+}
+
 /** Fallbacks when CSS variables are unavailable (tests / SSR). */
 const FALLBACK = {
   accent: "#b85a20",
@@ -1630,8 +1647,10 @@ export class CanonStrip {
       }
       const lenPx = this.chPx(seg.startVerseIndex, seg.endVerseIndex + 1);
       // Keep short books quiet, but retain enough landmarks to navigate the
-      // full-canon overview without relying only on the very longest books.
-      if (lenPx < (isH ? 22 : 14)) continue;
+      // full-canon overview — including a couple after the Gospels.
+      if (!isOverviewBookLabelCandidate(lenPx, seg.osis, vp.orientation)) {
+        continue;
+      }
       const p = this.railPoint(seg.startVerseIndex, w, h);
       candidates.push({
         name: seg.name,
@@ -1793,6 +1812,8 @@ export class CanonStrip {
     ctx.restore();
 
     if (k > 0.5) {
+      ctx.save();
+      ctx.globalAlpha = k;
       this.drawResultLabel(
         ch,
         "True",
@@ -1803,6 +1824,7 @@ export class CanonStrip {
         labelSide,
         chipLayout
       );
+      ctx.restore();
     }
   }
 
@@ -2021,22 +2043,23 @@ export class CanonStrip {
     roleText: string;
   } {
     const { ctx } = this;
+    // Match .result-ref-link typography (section-label + compact ref).
     const ref = verseLabel.toUpperCase();
     const roleText = role.toUpperCase();
     ctx.save();
-    ctx.font = `700 13px ${SERIF}`;
+    ctx.font = `600 12.5px ${SERIF}`;
     setLetterSpacing(ctx, "0.3px");
     const refW = ctx.measureText(ref).width;
-    ctx.font = `600 9px ${SERIF}`;
-    setLetterSpacing(ctx, "0.8px");
+    ctx.font = `600 11px ${SERIF}`;
+    setLetterSpacing(ctx, "0.7px");
     const roleW = ctx.measureText(roleText).width;
     setLetterSpacing(ctx, "0px");
     ctx.restore();
-    const padX = 12;
-    const padY = 8;
+    const padX = 10;
+    const padY = 7;
     const gap = 3;
-    const roleH = 11;
-    const refH = 16;
+    const roleH = 12;
+    const refH = 15;
     return {
       bw: Math.max(refW, roleW) + padX * 2,
       bh: padY * 2 + roleH + gap + refH,
@@ -2139,10 +2162,10 @@ export class CanonStrip {
   }
 
   /**
-   * Result-page callout: role caption + verse ref.
-   * Portrait: YOU left / TRUE right via coordinated layout (see
-   * layoutPortraitResultPair). Landscape: above/below along the band.
-   * Registers a hit box so the chip is a real route.bible link overlay.
+   * Result-page callout stem + hit box.
+   * Chip chrome lives in the DOM (.result-ref-link) so it shares panel /
+   * button material with achievements. Canvas only draws the hairline stem.
+   * Portrait: YOU left / TRUE right via layoutPortraitResultPair.
    */
   private drawResultLabel(
     verseIndex: number,
@@ -2160,13 +2183,7 @@ export class CanonStrip {
     const isYou = role.toLowerCase() === "you";
     const verseLabel = formatVerseLabel(verseIndex);
     const metrics = this.measureResultChip(verseLabel, role);
-    const { ref, roleText } = metrics;
 
-    const padX = 12;
-    const padY = 8;
-    const gap = 3;
-    const roleH = 11;
-    const refH = 16;
     const stem = 14;
     const crossGap = this.railThick() / 2 + 12;
 
@@ -2211,20 +2228,10 @@ export class CanonStrip {
       bx = Math.min(Math.max(4, bx), w - bw - 4);
     }
 
+    // Hairline stem toward the pin (role color → diamond)
     ctx.save();
-
-    // Transparent chip + strong border (page bg shows through)
-    ctx.fillStyle = this.colors.bg;
-    roundedRect(ctx, bx, by, bw, bh, 5);
-    ctx.fill();
     ctx.strokeStyle = ink;
-    ctx.lineWidth = 1.75;
-    roundedRect(ctx, bx, by, bw, bh, 5);
-    ctx.stroke();
-
-    // Stem toward the pin
-    ctx.strokeStyle = ink;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1;
     ctx.beginPath();
     if (isV) {
       const chipOnLeft = bx + bw / 2 <= p.x;
@@ -2244,33 +2251,6 @@ export class CanonStrip {
       }
     }
     ctx.stroke();
-
-    const cx = bx + bw / 2;
-    const textMax = Math.max(24, bw - padX * 2);
-    const refY = by + padY + roleH + gap + refH / 2 + 0.5;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = ink;
-    ctx.font = `600 9px ${SERIF}`;
-    setLetterSpacing(ctx, "0.9px");
-    ctx.globalAlpha = 0.85;
-    ctx.fillText(roleText, cx, by + padY + roleH / 2, textMax);
-    ctx.globalAlpha = 1;
-    ctx.font = `700 13px ${SERIF}`;
-    setLetterSpacing(ctx, "0.25px");
-    ctx.fillText(ref, cx, refY, textMax);
-    // Subtle underline so the chip reads as a tappable link
-    const underlineW = Math.min(textMax, ctx.measureText(ref).width);
-    ctx.strokeStyle = ink;
-    ctx.globalAlpha = 0.45;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(cx - underlineW / 2, refY + refH / 2 - 1);
-    ctx.lineTo(cx + underlineW / 2, refY + refH / 2 - 1);
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-
-    setLetterSpacing(ctx, "0px");
     ctx.restore();
 
     this.resultLinkHits.push({
@@ -2289,8 +2269,9 @@ export class CanonStrip {
   }
 
   /**
-   * Transparent DOM anchors over YOU/TRUE chips → route.bible.
-   * Real links so long-press / open-in-new-tab / a11y all work.
+   * DOM chips over YOU/TRUE markers → route.bible.
+   * Real links so long-press / open-in-new-tab / a11y all work; chrome
+   * matches secondary panel / button material via CSS.
    */
   private syncResultLinks(): void {
     const parent = this.canvas.parentElement;
@@ -2309,8 +2290,9 @@ export class CanonStrip {
       const href = routeBibleUrl(hit.verseIndex);
       if (!href) continue;
       const label = formatVerseLabel(hit.verseIndex);
+      const roleKey = hit.role.toLowerCase() === "you" ? "you" : "true";
       const a = document.createElement("a");
-      a.className = "result-ref-link";
+      a.className = `result-ref-link result-ref-link--${roleKey}`;
       a.href = href;
       a.target = "_blank";
       a.rel = "noopener noreferrer";
@@ -2319,10 +2301,21 @@ export class CanonStrip {
         "aria-label",
         `${hit.role}: ${label}. Open on route.bible`
       );
+      const roleEl = document.createElement("span");
+      roleEl.className = "result-ref-role";
+      roleEl.textContent = hit.role;
+      const verseEl = document.createElement("span");
+      verseEl.className = "result-ref-verse";
+      verseEl.textContent = label;
+      a.append(roleEl, verseEl);
       a.style.left = `${hit.bx}px`;
       a.style.top = `${hit.by}px`;
       a.style.width = `${hit.bw}px`;
       a.style.height = `${hit.bh}px`;
+      // TRUE fades in with the reveal animation; YOU is immediate.
+      if (roleKey === "true") {
+        a.style.opacity = String(Math.max(this.revealProgress, 0.05));
+      }
       // Keep canvas from starting a pan when the chip is pressed.
       a.addEventListener("pointerdown", (e) => {
         e.stopPropagation();
@@ -2383,16 +2376,6 @@ function diamond(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: numbe
   ctx.lineTo(cx + r, cy);
   ctx.lineTo(cx, cy + r);
   ctx.lineTo(cx - r, cy);
-  ctx.closePath();
-}
-
-function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
 }
 
