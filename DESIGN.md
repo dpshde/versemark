@@ -87,7 +87,7 @@ typography:
     letterSpacing: "-0.01em"
 rounded:
   panel: "0px"
-  btn: "6px"
+  btn: "0px"
   dropcap: "4px"
   pill: "999px"
 spacing:
@@ -218,7 +218,7 @@ Lists inside panels: `--row-rule` between rows; do not also draw a full panel bo
 
 ### Play
 
-- **Primary / secondary buttons**: terracotta solid vs transparent hairline (`--border-strong`); square corners on home CTAs (same panel language); 44px min height. Play dock may keep 6px radius where density needs softening.
+- **Primary / secondary buttons**: terracotta solid vs transparent hairline (`--border-strong`); **square corners** everywhere (same panel language as home Daily · Practice); 44px min height.
 - **Ghost / nav**: tertiary ink icons (home, theme, crown).
 - **Verse**: type over soft gradient; no card.
 - **Canon timeline**: full-width canvas; genre segments; terracotta diamond marker; olive true on reveal; precision notch ruler; edge scrubbing; Genesis→Revelation bounds.
@@ -229,7 +229,7 @@ Lists inside panels: `--row-rule` between rows; do not also draw a full panel bo
 - **Segmented control**: three equal small-caps radios in a square hairline frame; active = `--accent-soft` fill + `--accent-deep` type (`Farther` / `Coverage` / `Closer`).
 - **Canon heat map**: book-width segments; untested = `--rail`; tested = heat oklch from median miss; Closer←→Farther legend ramp; detail row + optional book picker.
 - **Focus lists**: Books / Genres collapsible; metric column matches mode (`~N chapters off`, `not tested`, `n/n close`).
-- **Unlocks**: horizontal rows, drop-cap tile (bronze / gold / snow), left accent stroke when unlocked; literary titles — not badge shelves or confetti.
+- **Unlocks**: horizontal rows, drop-cap tile (bronze / gold / snow); literary titles — not badge shelves or confetti.
 
 ## Motion
 

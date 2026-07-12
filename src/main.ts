@@ -1439,8 +1439,15 @@ function renderPlay(): void {
       type: "button",
       id: "btn-confirm",
       text: "Confirm",
+      "aria-label": "Confirm your guess",
     });
     confirm.disabled = provisionalGuess == null || guessInputInvalid;
+    confirm.title =
+      provisionalGuess == null
+        ? "Place a marker or type a reference first"
+        : guessInputInvalid
+          ? "Fix the reference before confirming"
+          : "Lock in your guess";
     confirm.addEventListener("click", () => {
       if (!round || provisionalGuess == null) return;
       // Prefer whatever is currently typed if it parses
@@ -1789,7 +1796,14 @@ function makeGuessInput(): HTMLElement {
 
 function syncConfirmEnabled(): void {
   const conf = document.querySelector<HTMLButtonElement>("#btn-confirm");
-  if (conf) conf.disabled = provisionalGuess == null || guessInputInvalid;
+  if (!conf) return;
+  const disabled = provisionalGuess == null || guessInputInvalid;
+  conf.disabled = disabled;
+  conf.title = disabled
+    ? provisionalGuess == null
+      ? "Place a marker or type a reference first"
+      : "Fix the reference before confirming"
+    : "Lock in your guess";
 }
 
 function syncTimelineCue(): void {

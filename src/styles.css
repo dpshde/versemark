@@ -36,7 +36,7 @@
   --heat-close: oklch(0.84 0.055 145);
   --heat-far: oklch(0.48 0.175 40);
 
-  --radius-btn: 6px;
+  --radius-btn: 0;
 
   /* 4pt scale */
   --space-xs: 4px;
@@ -371,8 +371,6 @@ body {
 
 .btn-row > button {
   width: 100%;
-  /* Secondary-screen CTAs — square like panels / segmented controls */
-  border-radius: 0;
 }
 
 /* ———— Buttons ———— */
@@ -394,6 +392,12 @@ button,
     color var(--dur-fast) ease;
 }
 
+/* Primary / secondary CTAs — square like home Daily · Practice and panels */
+.btn-primary,
+.btn-secondary {
+  border-radius: 0;
+}
+
 button:active:not(:disabled) {
   opacity: 0.9;
 }
@@ -411,6 +415,13 @@ button:disabled {
 .btn-primary:hover:not(:disabled) {
   background: var(--accent-deep);
   border-color: var(--accent-deep);
+}
+/* Soft well — not washed terracotta (opacity on accent reads muddy) */
+.btn-primary:disabled {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft);
+  color: var(--accent-deep);
+  opacity: 1;
 }
 
 .btn-with-icon {
@@ -442,6 +453,12 @@ button:disabled {
   color: var(--ink);
   border-color: var(--accent);
   background: var(--surface);
+}
+.btn-secondary:disabled {
+  color: var(--ink-3);
+  border-color: var(--border);
+  background: transparent;
+  opacity: 1;
 }
 
 .btn-ghost {
@@ -1518,28 +1535,6 @@ button:disabled {
   box-sizing: border-box;
 }
 
-/* Earned left-edge accent stroke keyed to metal */
-.achievement-row.is-unlocked {
-  position: relative;
-}
-.achievement-row.is-unlocked::before {
-  content: "";
-  position: absolute;
-  left: calc(var(--space-lg) * -1);
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 60%;
-  border-radius: 2px;
-  background: var(--accent);
-}
-.achievement-row.is-unlocked.metal-gold::before {
-  background: #d4a017;
-}
-.achievement-row.is-unlocked.metal-snow::before {
-  background: var(--ink-2);
-}
-
 /* Drop caps: bronze (terracotta) · gold · snow (holy black + snow-white). */
 .achievement-dropcap-frame {
   flex-shrink: 0;
@@ -1845,13 +1840,19 @@ button:disabled {
 }
 
 .guess-input::placeholder {
-  color: var(--ink-3);
+  /* ink-2 — placeholders need ≥4.5:1; ink-3 fails on --bg */
+  color: var(--ink-2);
   font-weight: 400;
   font-size: 0.92rem;
+  opacity: 1;
 }
 
 .guess-input:focus {
   outline: none;
+  border-bottom-color: var(--accent);
+}
+
+.guess-input:focus-visible {
   border-bottom-color: var(--accent);
 }
 
