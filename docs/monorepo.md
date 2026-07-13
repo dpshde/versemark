@@ -35,15 +35,19 @@ setStorageBackend(adapter);
 
 ## Scripts (repo root)
 
+Prefer **pnpm** (`pnpm-workspace.yaml` + `packageManager` field). Root scripts use `pnpm --filter`.
+
 ```bash
-npm install
-npm run mobile          # expo start
-npm run web             # vite dev
-npm test                # core + web platform tests
-npm run typecheck       # core + web + mobile
-npm run build           # web production static
-npm run export:mobile   # expo export (when toolchain available)
+pnpm install
+pnpm run mobile          # expo start
+pnpm run web             # vite dev
+pnpm test                # core + web platform tests
+pnpm run typecheck       # core + web + mobile
+pnpm run build           # web production static
+pnpm run export:mobile   # expo export (when toolchain available)
 ```
+
+`.npmrc` sets `node-linker=hoisted` so Expo/Metro resolve React Native deps reliably.
 
 ## Product note
 

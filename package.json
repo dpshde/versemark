@@ -3,25 +3,36 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@10.33.2",
   "workspaces": [
     "packages/*",
     "apps/*"
   ],
   "scripts": {
-    "mobile": "npm run start -w @versemark/mobile",
-    "mobile:start": "npm run start -w @versemark/mobile",
-    "web": "npm run dev -w @versemark/web",
-    "web:build": "npm run build -w @versemark/web",
-    "dev": "npm run web",
-    "build": "npm run build -w @versemark/web",
-    "test": "npm run test -w @versemark/core && npm run test -w @versemark/web",
-    "test:core": "npm run test -w @versemark/core",
-    "typecheck": "npm run typecheck -w @versemark/core && npm run typecheck -w @versemark/web && npm run typecheck -w @versemark/mobile",
-    "typecheck:core": "npm run typecheck -w @versemark/core",
-    "build:data": "npm run build:data -w @versemark/web",
-    "export:mobile": "npm run export -w @versemark/mobile"
+    "mobile": "pnpm --filter @versemark/mobile start",
+    "mobile:start": "pnpm --filter @versemark/mobile start",
+    "web": "pnpm --filter @versemark/web dev",
+    "web:build": "pnpm --filter @versemark/web build",
+    "dev": "pnpm run web",
+    "build": "pnpm --filter @versemark/web build",
+    "test": "pnpm --filter @versemark/core test && pnpm --filter @versemark/web test",
+    "test:core": "pnpm --filter @versemark/core test",
+    "typecheck": "pnpm --filter @versemark/core typecheck && pnpm --filter @versemark/web typecheck && pnpm --filter @versemark/mobile typecheck",
+    "typecheck:core": "pnpm --filter @versemark/core typecheck",
+    "build:data": "pnpm --filter @versemark/web build:data",
+    "export:mobile": "pnpm --filter @versemark/mobile export"
   },
   "engines": {
     "node": ">=20"
+  },
+  "pnpm": {
+    "overrides": {
+      "path-scurry>lru-cache": "^10.4.3"
+    }
+  },
+  "overrides": {
+    "path-scurry": {
+      "lru-cache": "^10.4.3"
+    }
   }
 }

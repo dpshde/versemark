@@ -22,19 +22,20 @@ See [docs/monorepo.md](docs/monorepo.md) for the share boundary (what is shared 
 ## Quick start
 
 ```bash
-npm install
+# Prefer pnpm (workspace-native). npm workspaces still work.
+pnpm install
 
 # Mobile (Expo)
-npm run mobile
+pnpm run mobile
 
 # Web (Vite)
-npm run web
+pnpm run web
 
 # Shared domain tests
-npm run test:core
-npm test                 # core + web platform tests
-npm run typecheck        # core + web + mobile
-npm run build            # web production static → apps/web/dist
+pnpm run test:core
+pnpm test                 # core + web platform tests
+pnpm run typecheck        # core + web + mobile
+pnpm run build            # web production static → apps/web/dist
 ```
 
 Shipped data under `apps/web/public/data/` and `packages/core/src/data/` is committed so the app runs offline without external monorepo tools.
