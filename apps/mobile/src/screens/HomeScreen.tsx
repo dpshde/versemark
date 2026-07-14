@@ -11,6 +11,7 @@ import {
 import { PrimaryButton } from "../components/PrimaryButton";
 import { CanonRibbon } from "../components/CanonRibbon";
 import { ThemeButton } from "../components/TopChrome";
+import { streakFlameLevel, streakMarkerProgress } from "../lib/streak-progress";
 import { spacing } from "../theme";
 import { useTheme } from "../theme-context";
 
@@ -70,7 +71,8 @@ export function HomeScreen({
             horizontal
             width={184}
             height={20}
-            markerAt={completedVerses > 0 ? completedVerses / DAILY_VERSE_COUNT : undefined}
+            markerAt={streakMarkerProgress(appState.streak)}
+            markerFlameLevel={streakFlameLevel(appState.streak)}
           />
         </View>
 
@@ -141,15 +143,15 @@ const styles = StyleSheet.create({
   },
   wordmarkRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "baseline",
     justifyContent: "center",
   },
   pin: {
-    width: 11,
-    height: 11,
-    transform: [{ rotate: "45deg" }],
-    marginHorizontal: 3,
-    marginBottom: 2,
+    width: 11.5,
+    height: 11.5,
+    marginLeft: 3.2,
+    marginRight: 3.8,
+    transform: [{ translateY: -1.3 }, { rotate: "45deg" }],
   },
   dailyHeader: {
     width: "100%",

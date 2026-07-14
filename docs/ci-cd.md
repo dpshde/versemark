@@ -27,6 +27,8 @@ pnpm typecheck
 pnpm build
 ```
 
+`pnpm test:all` is the equivalent combined local test command. Before a mobile release, also complete the native device matrix and evidence report in [Mobile development and device testing](mobile-device-testing.md). Automated checks do not validate native tabs, safe areas, haptics, accessibility services, keyboard behavior, or gesture performance.
+
 `pnpm test` covers core and web tests. Mobile tests are a separate command and must not be omitted. `pnpm build` produces the same web artifact expected by Vercel at `apps/web/dist`.
 
 Recommended repository policy:
@@ -296,9 +298,11 @@ Do not add `--submit --confirm` for an internal group. Those flags are for exter
 After processing:
 
 1. Install from TestFlight on a physical iPhone.
-2. Play Daily and Endless rounds through reveal.
-3. Verify persistence, sharing, haptics, appearance switching, and achievements.
-4. Review ASC processing status and crash feedback.
+2. Complete the release matrix in [Mobile development and device testing](mobile-device-testing.md).
+3. Play Daily and Endless rounds through reveal.
+4. Verify persistence, sharing, haptics, appearance switching, accessibility, and achievements.
+5. Attach the device report and evidence to the release record.
+6. Review ASC processing status and crash feedback.
 
 ### App Store lane
 

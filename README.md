@@ -28,12 +28,19 @@ pnpm install
 # Mobile (Expo)
 pnpm run mobile
 
+# Native simulator / emulator and RN Web preview
+pnpm run ios:simulator
+pnpm run android
+pnpm run mobile:web
+
 # Web (Vite)
 pnpm run web
 
 # Shared domain tests
 pnpm run test:core
 pnpm test                 # core + web platform tests
+pnpm run test:mobile      # mobile unit + structural smoke tests
+pnpm run test:all         # complete local test suite
 pnpm run typecheck        # core + web + mobile
 pnpm run build            # web production static → apps/web/dist
 ```
@@ -57,3 +64,5 @@ Shipped data under `apps/web/public/data/` and `packages/core/src/data/` is comm
 Vercel builds `@versemark/web` (`vercel.json` → `apps/web/dist`).
 
 See [docs/ci-cd.md](docs/ci-cd.md) for the required CI gate, Vercel preview/production flow, rollback procedure, and the ASC-based React Native iOS release runbook.
+
+For simulator, physical iOS/Android, tablet, accessibility, performance, and release-device QA, use [docs/mobile-device-testing.md](docs/mobile-device-testing.md).

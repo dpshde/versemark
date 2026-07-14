@@ -3,9 +3,7 @@
  * zoom controls, expandable verse, rough-to-precision timeline, typed Bible
  * references, hints, result links, daily summary, and sharing.
  */
-import { useCallback, useLayoutEffect, useMemo, useState } from "react";
-import { useNavigation } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useCallback, useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -54,8 +52,6 @@ export type PlayScreenProps = {
   onContinueEndless?: () => void;
 };
 
-type PlayNavigation = NativeStackNavigationProp<Record<string, object | undefined>>;
-
 function multiplierLabel(step: number): string {
   return step <= 1 ? "×3" : step === 2 ? "×2" : "×1";
 }
@@ -101,7 +97,6 @@ export function PlayScreen({
   onContinueEndless,
 }: PlayScreenProps) {
   const { colors, typography } = useTheme();
-  const navigation = useNavigation<PlayNavigation>();
   const insets = useSafeAreaInsets();
   const isCompletedDailyRound =
     round.mode === "daily" &&
@@ -198,20 +193,6 @@ export function PlayScreen({
     setZoom(preset);
   }, [guess, zoom]);
 
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerTitle: round.phase === "playing" && guess != null
-        ? () => (
-            <View style={[styles.headerSegment, { backgroundColor: colors.surface2 }]}>
-              <SegmentedButton label="OT" active={zoom === "ot"} onPress={() => zoomPreset("ot")} />
-              <SegmentedButton label="NT" active={zoom === "nt"} onPress={() => zoomPreset("nt")} />
-              <SegmentedButton label="Book" active={zoom === "book"} onPress={() => zoomPreset("book")} />
-            </View>
-          )
-        : undefined,
-    });
-  }, [colors.surface2, guess, navigation, round.phase, zoom, zoomPreset]);
-
   return (
     <KeyboardAvoidingView
       style={[styles.root, { backgroundColor: colors.bg }]}
@@ -274,6 +255,11 @@ export function PlayScreen({
             {round.phase === "playing" && guess != null ? (
               <StageReveal>
                 <View style={styles.playChrome}>
+                  <View style={[styles.zoomSegment, { backgroundColor: colors.surface2 }]}>
+                    <SegmentedButton label="OT" active={zoom === "ot"} onPress={() => zoomPreset("ot")} />
+                    <SegmentedButton label="NT" active={zoom === "nt"} onPress={() => zoomPreset("nt")} />
+                    <SegmentedButton label="Book" active={zoom === "book"} onPress={() => zoomPreset("book")} />
+                  </View>
                   <View style={styles.guessRow}>
                     <View style={styles.inputWrap}>
                       <TextInput
@@ -340,12 +326,18 @@ export function PlayScreen({
               <StageReveal>
                 <View style={styles.result}>
                   {round.result.distance === 0 ? <ExactLanding /> : null}
-                  <Text style={[typography.score, styles.resultVerdict, { color: round.result.distance === 0 ? colors.success : colors.ink }]}>
-                    {round.result.distance === 0 ? "Exact" : formatMiss(round.result.distance)}
+                  <Text style={[typography.score, styles.resultScore, { color: colors.ink }]}>
+                    {scoreFormatter.format(displayScore)} pts
                   </Text>
-                  <Text style={[styles.scoreMeta, typography.body, { color: colors.ink2 }]}>
-                    {scoreFormatter.format(displayScore)} pts · {hintSpendLabel(round.result.hintStep)}
-                  </Text>
+                  <View style={styles.resultDetailRow}>
+                    <Text style={[typography.body, styles.resultDistance, { color: round.result.distance === 0 ? colors.success : colors.ink2 }]}>
+                      {round.result.distance === 0 ? "Exact" : formatMiss(round.result.distance)}
+                    </Text>
+                    <View style={[styles.resultDetailDot, { backgroundColor: colors.ink3 }]} />
+                    <Text style={[typography.body, styles.scoreMeta, { color: colors.ink2 }]}>
+                      {hintSpendLabel(round.result.hintStep)}
+                    </Text>
+                  </View>
 
                   {dailyDone && round.daily ? (
                     <View style={[styles.dailySummary, { borderTopColor: colors.rowRule }]}>
@@ -353,7 +345,7 @@ export function PlayScreen({
                         <View key={`${item.trueRef}-${index}`} style={styles.summaryRow}>
                           <Text style={[typography.body, styles.summaryText]}>{index + 1}. {formatVerseLabel(item.trueVerseIndex)}</Text>
                           <Text style={[typography.body, styles.summaryText, { color: colors.ink2 }]}>
-                            {formatMiss(item.distance)} · {item.total} pts
+                            {item.total} pts · {formatMiss(item.distance)}
                           </Text>
                         </View>
                       ))}
@@ -391,27 +383,39 @@ export function PlayScreen({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  headerSegment: { flexDirection: "row", height: 36, padding: 2, borderRadius: 9, borderCurve: "continuous" },
-  segmentButton: { minWidth: 38, minHeight: 32, paddingHorizontal: spacing.sm, borderRadius: 7, borderCurve: "continuous", alignItems: "center", justifyContent: "center" },
+  zoomSegment: { alignSelf: "center", flexDirection: "row", padding: 2, borderRadius: 9, borderCurve: "continuous" },
+  segmentButton: { minWidth: spacing.touch, minHeight: spacing.touch, paddingHorizontal: spacing.sm, borderRadius: 7, borderCurve: "continuous", alignItems: "center", justifyContent: "center" },
   scroll: { flex: 1 },
   content: { paddingBottom: spacing.sm, flexGrow: 1 },
   verseBand: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xs, maxWidth: 576, alignSelf: "center", width: "100%" },
   chevron: { alignSelf: "center", fontSize: 15, lineHeight: 18, marginTop: spacing.xs },
-  board: { paddingHorizontal: spacing.sm, paddingVertical: 0, width: "100%" },
+  board: { flex: 1, minHeight: 0, paddingHorizontal: spacing.sm, paddingVertical: 0, width: "100%" },
   dock: { flexShrink: 0, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, width: "100%", borderTopWidth: StyleSheet.hairlineWidth },
   dockInner: { gap: spacing.sm, maxWidth: 576, width: "100%", alignSelf: "center" },
   hintBody: { fontSize: 15, lineHeight: 22, textAlign: "center" },
   playChrome: { gap: spacing.sm },
   guessRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, zIndex: 3 },
   inputWrap: { flex: 1, position: "relative" },
-  guessInput: { minHeight: spacing.touch, borderWidth: 1, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 16, lineHeight: 22 },
+  guessInput: {
+    minHeight: spacing.touch,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: 16,
+    lineHeight: 22,
+    outlineWidth: Platform.OS === "web" ? 0 : undefined,
+    outlineColor: Platform.OS === "web" ? "transparent" : undefined,
+  },
   guessError: { fontFamily: Platform.select({ ios: "Georgia", android: "serif" }), fontSize: 12, marginTop: spacing.xs },
   suggestions: { borderWidth: 1, borderTopWidth: 0, maxHeight: 220 },
   suggestion: { minHeight: spacing.touch, paddingHorizontal: spacing.md, justifyContent: "center" },
   hintBtn: { width: 84 },
   confirmBtn: { width: 120 },
   result: { alignItems: "center", gap: spacing.sm, paddingTop: spacing.sm, borderRadius: radius.panel, borderCurve: "continuous" },
-  resultVerdict: { textAlign: "center" },
+  resultScore: { fontSize: 38, lineHeight: 44, fontWeight: "800", textAlign: "center", fontVariant: ["tabular-nums"] },
+  resultDetailRow: { minHeight: 24, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm },
+  resultDistance: { fontSize: 15, lineHeight: 22, fontWeight: "600", textAlign: "center" },
+  resultDetailDot: { width: 3, height: 3, borderRadius: 2 },
   scoreMeta: { fontSize: 14, lineHeight: 20, textAlign: "center" },
   dailySummary: { width: "100%", borderTopWidth: StyleSheet.hairlineWidth, marginTop: spacing.sm, paddingTop: spacing.sm },
   summaryRow: { flexDirection: "row", justifyContent: "space-between", gap: spacing.sm, paddingVertical: spacing.xs },

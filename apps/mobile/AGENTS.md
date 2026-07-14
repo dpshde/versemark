@@ -50,3 +50,10 @@ Apply these rules to every change under `apps/mobile`:
 - Embed custom fonts with the Expo font config plugin rather than async runtime loading.
 
 Rules for galleries, menus, modals, Reanimated, and custom fonts become mandatory when those features or packages are introduced; do not add unused dependencies solely to demonstrate a rule.
+
+## Verification and handoff
+
+- Follow [`docs/mobile-device-testing.md`](../../docs/mobile-device-testing.md) for environment limits, simulator and physical-device setup, the PR/release device matrix, accessibility variants, manual gameplay scenarios, performance checks, and the evidence template.
+- Before manual device QA, run `pnpm test:all`, `pnpm typecheck`, and `pnpm lint:mobile` from the repository root.
+- React Native Web is a preview only. Do not claim that native tabs, navigation materials, safe areas, haptics, keyboard behavior, accessibility services, launch continuity, or gesture performance are verified from the browser.
+- UI changes require the PR-minimum device matrix. Gesture, animation, keyboard, navigation, or performance changes require a native screen recording; release claims require the exact TestFlight/release build and recorded device/OS evidence.

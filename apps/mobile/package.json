@@ -15,6 +15,7 @@
     "start:lan": "expo start --lan",
     "start:tunnel": "expo start --tunnel",
     "android": "expo run:android",
+    "ios:simulator": "expo run:ios",
     "ios": "expo run:ios --configuration Release",
     "ios:device": "bash ./scripts/run-ios-device.sh \"DPS iPhone\"",
     "ios:device:any": "bash ./scripts/run-ios-device.sh",

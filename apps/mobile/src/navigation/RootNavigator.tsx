@@ -21,7 +21,6 @@ import {
   type TranslationId,
 } from "@versemark/core";
 import { TranslationButton } from "../components/TopChrome";
-import { MobileTabBar } from "../components/MobileTabBar";
 import { AchievementsScreen } from "../screens/AchievementsScreen";
 import { HomeScreen } from "../screens/HomeScreen";
 import { PlayScreen } from "../screens/PlayScreen";
@@ -29,6 +28,7 @@ import { fontFamily } from "../theme";
 import { useTheme } from "../theme-context";
 import {
   ActivityIndicator,
+  Image,
   Platform,
   SafeAreaView,
   StyleSheet,
@@ -66,6 +66,14 @@ const WebTabs = createBottomTabNavigator<MainTabParamList>();
 const NativeTabs = Platform.OS === "web"
   ? null
   : createNativeBottomTabNavigator<MainTabParamList>();
+
+function PlayTabIcon({ color }: { color: string }) {
+  return (
+    <View style={styles.tabIconFrame}>
+      <View style={[styles.playTabIcon, { borderLeftColor: color }]} />
+    </View>
+  );
+}
 
 function ProgressRoute({
   appState,
@@ -207,7 +215,7 @@ export function RootNavigator(props: RootNavigatorProps) {
           title: "Play",
           tabBarLabel: "Play",
           tabBarIcon: ({ focused }) => Platform.OS === "ios"
-            ? { type: "sfSymbol", name: focused ? "diamond.fill" : "diamond" }
+            ? { type: "sfSymbol", name: focused ? "play.fill" : "play" }
             : { type: "image", source: require("../../assets/tab-play.png") },
         }}
       >
@@ -230,16 +238,30 @@ export function RootNavigator(props: RootNavigatorProps) {
   ) : (
     <WebTabs.Navigator
       backBehavior="history"
-      tabBar={(tabProps) => <MobileTabBar {...tabProps} />}
       screenOptions={{
         headerShown: false,
         animation: "fade",
         transitionSpec: { animation: "timing", config: { duration: 180 } },
+        tabBarActiveTintColor: colors.accentDeep,
+        tabBarInactiveTintColor: colors.ink3,
+        tabBarStyle: {
+          backgroundColor: colors.bg,
+          borderTopColor: colors.border,
+        },
+        tabBarLabelStyle: {
+          fontFamily,
+          fontSize: 12,
+          fontWeight: "600",
+        },
       }}
     >
       <WebTabs.Screen
         name="Play"
-        options={{ title: "Play", tabBarLabel: "Play" }}
+        options={{
+          title: "Play",
+          tabBarLabel: "Play",
+          tabBarIcon: ({ color }) => <PlayTabIcon color={color} />,
+        }}
       >
         {() => playContent}
       </WebTabs.Screen>
@@ -249,6 +271,14 @@ export function RootNavigator(props: RootNavigatorProps) {
           title: "Progress",
           tabBarLabel: "Progress",
           tabBarBadge: unseen > 0 ? unseen : undefined,
+          tabBarIcon: ({ color }) => (
+            <Image
+              source={require("../../assets/tab-progress.png")}
+              style={styles.tabIcon}
+              tintColor={color}
+              contentFit="contain"
+            />
+          ),
         }}
       >
         {() => progressContent}
@@ -282,4 +312,16 @@ export function RootNavigator(props: RootNavigatorProps) {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   loading: { flex: 1, alignItems: "center", justifyContent: "center" },
+  tabIcon: { width: 22, height: 22 },
+  tabIconFrame: { width: 22, height: 22, alignItems: "center", justifyContent: "center" },
+  playTabIcon: {
+    width: 0,
+    height: 0,
+    marginLeft: 3,
+    borderTopWidth: 7,
+    borderBottomWidth: 7,
+    borderLeftWidth: 12,
+    borderTopColor: "transparent",
+    borderBottomColor: "transparent",
+  },
 });

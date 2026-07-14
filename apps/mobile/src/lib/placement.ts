@@ -59,3 +59,21 @@ export function testamentSeamFraction(): number {
 export function canonVerseCount(): number {
   return TOTAL_VERSES;
 }
+
+/** Shift a visible verse window without changing its span or leaving the canon. */
+export function shiftVerseRange(
+  start: number,
+  end: number,
+  deltaVerses: number
+): { start: number; end: number; moved: number } {
+  const safeStart = clampVerse(Math.round(start));
+  const safeEnd = clampVerse(Math.max(safeStart, Math.round(end)));
+  const span = safeEnd - safeStart;
+  const maxStart = Math.max(1, TOTAL_VERSES - span);
+  const nextStart = Math.max(1, Math.min(maxStart, safeStart + Math.round(deltaVerses)));
+  return {
+    start: nextStart,
+    end: nextStart + span,
+    moved: nextStart - safeStart,
+  };
+}

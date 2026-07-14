@@ -147,9 +147,21 @@ function MasteryList({
         style={[styles.listHeader, { backgroundColor: colors.surface2 }]}
         accessibilityRole={items.length > 4 ? "button" : undefined}
         accessibilityState={items.length > 4 ? { expanded } : undefined}
+        accessibilityLabel={items.length > 4 ? `${expanded ? "Collapse" : "Expand"} ${title}` : undefined}
       >
         <Text style={typography.section}>{title}</Text>
-        {items.length > 4 ? <Text style={{ color: colors.ink3 }}>{expanded ? "Less" : "All"}</Text> : null}
+        {items.length > 4 ? (
+          <View
+            accessibilityElementsHidden
+            style={[
+              styles.listChevron,
+              {
+                borderColor: colors.ink2,
+                transform: [{ rotate: expanded ? "225deg" : "45deg" }],
+              },
+            ]}
+          />
+        ) : null}
       </Pressable>
       {visible.map((item, index) => (
         <Pressable
@@ -177,7 +189,7 @@ function MasteryList({
 }
 
 export function AchievementsScreen({ appState }: AchievementsScreenProps) {
-  const { colors, typography } = useTheme();
+  const { colors, scheme, typography } = useTheme();
   const mapRef = useRef<ComponentRef<typeof View>>(null);
   const mastery = useMemo(() => computeMastery(appState), [appState]);
   const achievements = useMemo(() => listAchievements(appState), [appState]);
@@ -270,6 +282,7 @@ export function AchievementsScreen({ appState }: AchievementsScreenProps) {
       </View>
       <LegendList
         data={milestoneRows}
+        extraData={scheme}
         keyExtractor={achievementKey}
         getItemType={achievementItemType}
         renderItem={renderMilestone}
@@ -278,6 +291,15 @@ export function AchievementsScreen({ appState }: AchievementsScreenProps) {
         {...(Platform.OS === "web" ? {} : { contentInsetAdjustmentBehavior: "automatic" as const })}
         ListHeaderComponent={(
           <View style={styles.headerContent}>
+        {next && !showAllMilestones ? (
+          <View>
+            <Text style={[typography.section, styles.outsideLabel]}>Next milestone</Text>
+            <View style={[styles.log, { borderColor: colors.borderStrong, backgroundColor: colors.surface }]}>
+              <AchievementRow item={next} featured last />
+            </View>
+          </View>
+        ) : null}
+
         {mastery.totalRounds === 0 ? (
           <View style={styles.emptyState}>
             <CanonRibbon height={88} />
@@ -368,15 +390,6 @@ export function AchievementsScreen({ appState }: AchievementsScreenProps) {
           </>
         )}
 
-        {next && !showAllMilestones ? (
-          <View>
-            <Text style={[typography.section, styles.outsideLabel]}>Next milestone</Text>
-            <View style={[styles.log, { borderColor: colors.borderStrong, backgroundColor: colors.surface }]}>
-              <AchievementRow item={next} featured last />
-            </View>
-          </View>
-        ) : null}
-
         <View>
           <View style={styles.sectionHeaderRow}>
             <Text style={[typography.section, styles.outsideLabel, styles.sectionHeaderLabel]}>Milestones · {counts.unlocked}</Text>
@@ -432,6 +445,7 @@ const styles = StyleSheet.create({
   mapMeta: { fontSize: 13, lineHeight: 19 },
   masteryList: { borderWidth: 1 },
   listHeader: { minHeight: spacing.touch, paddingHorizontal: spacing.md, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  listChevron: { width: 9, height: 9, marginRight: spacing.xs, borderRightWidth: 1.5, borderBottomWidth: 1.5 },
   masteryRow: { minHeight: spacing.touch, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: spacing.md },
   masteryName: { flex: 1, fontSize: 14, lineHeight: 20 },
   masteryMetric: { fontSize: 13, lineHeight: 18, textAlign: "right" },

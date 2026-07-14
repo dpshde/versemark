@@ -5,6 +5,7 @@ import {
   markerFraction,
   testamentSeamFraction,
   canonVerseCount,
+  shiftVerseRange,
 } from "../src/lib/placement";
 import {
   tToVerse,
@@ -60,5 +61,15 @@ describe("placement (real core axis)", () => {
 
   it("canon verse count matches core", () => {
     expect(canonVerseCount()).toBe(TOTAL_VERSES);
+  });
+
+  it("shifts a precision range without changing its span", () => {
+    expect(shiftVerseRange(100, 250, 40)).toEqual({ start: 140, end: 290, moved: 40 });
+    expect(shiftVerseRange(1, 151, -80)).toEqual({ start: 1, end: 151, moved: 0 });
+    expect(shiftVerseRange(TOTAL_VERSES - 150, TOTAL_VERSES, 80)).toEqual({
+      start: TOTAL_VERSES - 150,
+      end: TOTAL_VERSES,
+      moved: 0,
+    });
   });
 });

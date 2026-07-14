@@ -2,6 +2,8 @@
 
 Expo / React Native client. Shares game domain via `@versemark/core`.
 
+The authoritative device matrix, Android setup, accessibility scenarios, performance checks, evidence template, and release acceptance criteria live in [Mobile development and device testing](../../docs/mobile-device-testing.md).
+
 ## Expo Go (quick, network)
 
 ```bash
@@ -59,3 +61,18 @@ For signed TestFlight and App Store delivery, including ASC CLI authentication, 
 ```bash
 pnpm --filter @versemark/mobile exec bash ./scripts/run-ios-device.sh "Some Other iPhone"
 ```
+
+## Other development targets
+
+From the repository root:
+
+```bash
+pnpm ios:simulator        # native iOS Simulator build
+pnpm android              # booted Android emulator or connected device
+pnpm mobile:web           # React Native Web preview only
+pnpm test:all             # core + web + mobile tests
+pnpm typecheck
+pnpm lint:mobile
+```
+
+Do not approve native tab bars, safe areas, haptics, keyboard behavior, accessibility, or gesture performance from the web preview alone.
