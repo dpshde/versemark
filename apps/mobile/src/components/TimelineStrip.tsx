@@ -5,6 +5,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linking } from "react-native";
 import {
+  Animated,
+  Easing,
   View,
   Text,
   StyleSheet,
@@ -31,7 +33,7 @@ import {
   visibleRange,
   type ZoomPreset,
 } from "@versemark/core";
-import { hapticSelection } from "../lib/haptics";
+import { hapticConfirm, hapticLight, hapticSelection } from "../lib/haptics";
 import { shiftVerseRange } from "../lib/placement";
 import { genreColor, spacing } from "../theme";
 import { useTheme } from "../theme-context";
@@ -57,7 +59,8 @@ type TimelineRange = {
 const AXIS_INSET = 20;
 const RAIL_WIDTH = 22;
 const MARKER_SIZE = 14;
-const RESULT_LABEL_HEIGHT = 56;
+const RESULT_LABEL_HEIGHT = 46;
+const DRAG_LABEL_HEIGHT = 54;
 const NOTCH_GAP = 8;
 const ACTIVE_NOTCH_LENGTH = 28;
 const OVERVIEW_LANDMARK_OSIS = new Set(["JOS", "EZR", "ROM", "EPH", "HEB", "REV"]);
@@ -152,8 +155,8 @@ function rangeFor(zoom: NativeZoom, anchor: number | null): TimelineRange {
   };
 }
 
-function labelTop(y: number | null, height: number): number {
-  return Math.max(4, Math.min(height - 44, (y ?? AXIS_INSET) - 19));
+function labelTop(y: number | null, height: number, labelHeight: number): number {
+  return Math.max(spacing.xs, Math.min(height - labelHeight - spacing.xs, (y ?? AXIS_INSET) - labelHeight / 2));
 }
 
 function resultLabelTop(y: number | null, height: number): number {
@@ -173,11 +176,13 @@ export function TimelineStrip({
   zoom,
   onPlace,
 }: TimelineStripProps) {
-  const { colors, typography } = useTheme();
+  const { colors, reduceMotion, typography } = useTheme();
   const heightRef = useRef(0);
   const [height, setHeight] = useState(0);
+  const [boardWidth, setBoardWidth] = useState(0);
   const [dragVerse, setDragVerse] = useState<number | null>(null);
   const [dragRange, setDragRange] = useState<TimelineRange | null>(null);
+  const [dragLabelHeight, setDragLabelHeight] = useState(DRAG_LABEL_HEIGHT);
   const dragVerseRef = useRef<number | null>(null);
   const rangeRef = useRef<TimelineRange | null>(null);
   const dragYRef = useRef(AXIS_INSET);
@@ -188,6 +193,8 @@ export function TimelineStrip({
   const edgeHoldStartRef = useRef(0);
   const edgeCarryRef = useRef(0);
   const lastHapticVerse = useRef<number | null>(null);
+  const lastHapticAt = useRef(0);
+  const boardShiftX = useRef(new Animated.Value(0)).current;
   const baseRange = rangeFor(zoom, guessVerseIndex ?? truthVerseIndex);
   const range = dragRange ?? baseRange;
   rangeRef.current = range;
@@ -198,6 +205,25 @@ export function TimelineStrip({
   const minimumBoardHeight = revealed ? 340 : precise ? 400 : 470;
   const axisLength = Math.max(1, height - AXIS_INSET * 2);
   const displayGuess = dragVerse ?? guessVerseIndex;
+  const dragShift = dragVerse != null
+    ? -Math.min(68, boardWidth * 0.13)
+    : 0;
+
+  useEffect(() => {
+    boardShiftX.stopAnimation();
+    if (reduceMotion) {
+      boardShiftX.setValue(dragShift);
+      return;
+    }
+    const animation = Animated.timing(boardShiftX, {
+      toValue: dragShift,
+      duration: dragShift === 0 ? 180 : 150,
+      easing: Easing.out(Easing.exp),
+      useNativeDriver: Platform.OS !== "web",
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [boardShiftX, dragShift, reduceMotion]);
 
   const placeAt = useCallback(
     (y: number, activeRange = rangeRef.current) => {
@@ -207,8 +233,10 @@ export function TimelineStrip({
       const fraction = Math.min(1, Math.max(0, (y - AXIS_INSET) / usable));
       const activeSpan = Math.max(1, activeRange.end - activeRange.start);
       const verseIndex = clampVerse(activeRange.start + fraction * activeSpan);
-      if (lastHapticVerse.current !== verseIndex) {
+      const now = performance.now();
+      if (lastHapticVerse.current !== verseIndex && now - lastHapticAt.current >= 40) {
         lastHapticVerse.current = verseIndex;
+        lastHapticAt.current = now;
         hapticSelection();
       }
       dragVerseRef.current = verseIndex;
@@ -311,7 +339,10 @@ export function TimelineStrip({
     stopEdgeScroll();
     const placed = dragVerseRef.current;
     dragVerseRef.current = null;
-    if (placed != null) onPlace(placed);
+    if (placed != null) {
+      hapticConfirm();
+      onPlace(placed);
+    }
     setDragVerse(null);
     setDragRange(null);
   }, [onPlace, stopEdgeScroll]);
@@ -333,6 +364,8 @@ export function TimelineStrip({
         onMoveShouldSetPanResponder: () => interactive,
         onPanResponderGrant: (event: GestureResponderEvent) => {
           draggingRef.current = true;
+          lastHapticVerse.current = null;
+          lastHapticAt.current = 0;
           dragYRef.current = event.nativeEvent.locationY;
           placeAt(dragYRef.current);
           startEdgeScroll();
@@ -350,8 +383,15 @@ export function TimelineStrip({
 
   const onLayout = useCallback((event: LayoutChangeEvent) => {
     const nextHeight = event.nativeEvent.layout.height;
+    const nextWidth = event.nativeEvent.layout.width;
     heightRef.current = nextHeight;
     setHeight((current) => (current === nextHeight ? current : nextHeight));
+    setBoardWidth((current) => (current === nextWidth ? current : nextWidth));
+  }, []);
+
+  const onDragLabelLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextHeight = Math.ceil(event.nativeEvent.layout.height);
+    setDragLabelHeight((current) => current === nextHeight ? current : nextHeight);
   }, []);
 
   const yFor = (verse: number | null) => {
@@ -371,8 +411,14 @@ export function TimelineStrip({
 
   return (
     <View style={styles.wrap}>
-      <View
-        style={[styles.board, { minHeight: minimumBoardHeight }]}
+      <Animated.View
+        style={[
+          styles.board,
+          {
+            minHeight: minimumBoardHeight,
+            transform: [{ translateX: boardShiftX }],
+          },
+        ]}
         onLayout={onLayout}
         {...panResponder.panHandlers}
         accessibilityRole="adjustable"
@@ -384,11 +430,22 @@ export function TimelineStrip({
           if (!interactive) return;
           const delta = precise ? 1 : Math.max(1, Math.round(span / 100));
           const base = displayGuess ?? range.start;
+          hapticSelection();
           onPlace(clampVerse(base + (event.nativeEvent.actionName === "increment" ? delta : -delta)));
         }}
       >
         {precise && !bookPrecision ? <Text style={[typography.section, styles.topEnd, { color: colors.ink3 }]}>{range.top}</Text> : null}
         {precise && !bookPrecision ? <Text style={[typography.section, styles.bottomEnd, { color: colors.ink3 }]}>{range.bottom}</Text> : null}
+
+        {interactive && displayGuess == null ? (
+          <Text
+            accessible={false}
+            pointerEvents="none"
+            style={[styles.roughCue, { color: colors.ink2 }]}
+          >
+            Rough placement
+          </Text>
+        ) : null}
 
         {bookLabels.map((book) => (
           <Text
@@ -533,26 +590,47 @@ export function TimelineStrip({
               ]}
             />
             {revealed ? (
-              <Pressable
-                onPress={() => {
-                  const url = routeBibleUrl(truthVerseIndex!);
-                  if (url) void Linking.openURL(url);
-                }}
-                accessibilityRole="link"
-                accessibilityLabel={`Answer ${formatVerseLabel(truthVerseIndex!)}`}
+              <View
+                pointerEvents="box-none"
                 style={[
-                  styles.resultLabel,
-                  styles.truthLabel,
-                  {
-                    top: resultLabelTop(truthY, height),
-                    backgroundColor: colors.success,
-                    borderColor: colors.success,
-                  },
+                  styles.resultCallout,
+                  styles.truthCallout,
+                  { top: resultLabelTop(truthY, height) },
                 ]}
               >
-                <Text style={[typography.label, styles.resultRole, { color: colors.bg }]}>Answer</Text>
-                <Text numberOfLines={1} style={[typography.body, styles.markerRef, { color: colors.bg }]}>{formatVerseLabel(truthVerseIndex!)}</Text>
-              </Pressable>
+                <View
+                  pointerEvents="none"
+                  style={[styles.resultStem, { backgroundColor: colors.success }]}
+                />
+                <Pressable
+                  onPress={() => {
+                    const url = routeBibleUrl(truthVerseIndex!);
+                    if (url) {
+                      hapticLight();
+                      void Linking.openURL(url);
+                    }
+                  }}
+                  accessibilityRole="link"
+                  accessibilityLabel={`True reference ${formatVerseLabel(truthVerseIndex!)}`}
+                  style={[
+                    styles.resultLabel,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.borderStrong,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.resultRole, { color: colors.success }]}>TRUE</Text>
+                  <Text
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.78}
+                    style={[styles.markerRef, { color: colors.ink }]}
+                  >
+                    {formatVerseLabel(truthVerseIndex!)}
+                  </Text>
+                </Pressable>
+              </View>
             ) : null}
           </>
         ) : null}
@@ -604,57 +682,67 @@ export function TimelineStrip({
                 </Text>
               </View>
             ) : null}
-            {!revealed && activeLabel && bookPrecision && dragVerse != null ? (
+            {!revealed && activeLabel && dragVerse != null ? (
               <Text
                 pointerEvents="none"
-                numberOfLines={1}
-                style={[styles.scrubRef, { top: labelTop(guessY, height) + 8, color: colors.accentDeep }]}
+                onLayout={onDragLabelLayout}
+                style={[
+                  styles.scrubRef,
+                  {
+                    top: labelTop(guessY, height, dragLabelHeight),
+                    color: colors.accentDeep,
+                  },
+                ]}
               >
                 {activeLabel.toUpperCase()}
               </Text>
             ) : null}
-            {!revealed && activeLabel && !bookPrecision ? (
-              <View
-                pointerEvents="none"
-                style={[
-                  styles.liveGuessLabel,
-                  {
-                    top: labelTop(guessY, height),
-                    backgroundColor: dragVerse != null ? colors.accentSoft : colors.surface,
-                    borderColor: dragVerse != null ? colors.accent : colors.borderStrong,
-                  },
-                ]}
-              >
-                <Text numberOfLines={1} style={[typography.body, styles.liveMarkerRef, { color: colors.ink }]}>
-                  {activeLabel}
-                </Text>
-              </View>
-            ) : null}
             {revealed ? (
-              <Pressable
-                onPress={() => {
-                  const url = displayGuess == null ? null : routeBibleUrl(displayGuess);
-                  if (url) void Linking.openURL(url);
-                }}
-                accessibilityRole="link"
-                accessibilityLabel={activeLabel ? `Your guess ${activeLabel}` : undefined}
+              <View
+                pointerEvents="box-none"
                 style={[
-                  styles.resultLabel,
-                  styles.guessLabel,
-                  {
-                    top: resultLabelTop(guessY, height),
-                    backgroundColor: colors.accentSoft,
-                    borderColor: colors.accent,
-                  },
+                  styles.resultCallout,
+                  styles.guessCallout,
+                  { top: resultLabelTop(guessY, height) },
                 ]}
               >
-                <Text style={[typography.label, styles.resultRole, { color: colors.accentDeep }]}>You</Text>
-                <Text numberOfLines={1} style={[typography.body, styles.markerRef, { color: colors.ink }]}>{activeLabel}</Text>
-              </Pressable>
+                <Pressable
+                  onPress={() => {
+                    const url = displayGuess == null ? null : routeBibleUrl(displayGuess);
+                    if (url) {
+                      hapticLight();
+                      void Linking.openURL(url);
+                    }
+                  }}
+                  accessibilityRole="link"
+                  accessibilityLabel={activeLabel ? `Your guess ${activeLabel}` : undefined}
+                  style={[
+                    styles.resultLabel,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.borderStrong,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.resultRole, { color: colors.accentDeep }]}>YOU</Text>
+                  <Text
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.78}
+                    style={[styles.markerRef, { color: colors.ink }]}
+                  >
+                    {activeLabel}
+                  </Text>
+                </Pressable>
+                <View
+                  pointerEvents="none"
+                  style={[styles.resultStem, { backgroundColor: colors.accentDeep }]}
+                />
+              </View>
             ) : null}
           </>
         ) : null}
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -695,6 +783,17 @@ const styles = StyleSheet.create({
   },
   topEnd: { position: "absolute", top: 0, left: "50%", marginLeft: RAIL_WIDTH / 2 + 10, fontSize: 10 },
   bottomEnd: { position: "absolute", bottom: 0, left: "50%", marginLeft: RAIL_WIDTH / 2 + 10, fontSize: 10 },
+  roughCue: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    width: 92,
+    marginLeft: RAIL_WIDTH / 2 + spacing.lg,
+    marginTop: -18,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "500",
+  },
   verseNotch: {
     position: "absolute",
     right: "50%",
@@ -721,22 +820,6 @@ const styles = StyleSheet.create({
     opacity: 0.72,
     zIndex: 3,
   },
-  liveGuessLabel: {
-    position: "absolute",
-    left: "50%",
-    marginLeft: RAIL_WIDTH / 2 + spacing.sm,
-    minWidth: 104,
-    maxWidth: 148,
-    minHeight: 38,
-    justifyContent: "center",
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
-    borderCurve: "continuous",
-    zIndex: 5,
-  },
-  liveMarkerRef: { fontSize: 15, lineHeight: 20, fontWeight: "600" },
   settledRefWrap: {
     position: "absolute",
     top: 0,
@@ -763,8 +846,8 @@ const styles = StyleSheet.create({
   scrubRef: {
     position: "absolute",
     left: "50%",
-    marginLeft: RAIL_WIDTH / 2 + 14,
-    maxWidth: 180,
+    right: spacing.sm,
+    marginLeft: RAIL_WIDTH / 2 + spacing.md,
     fontFamily: Platform.select({ ios: "Georgia", android: "serif", default: "Georgia" }),
     fontSize: 16,
     lineHeight: 22,
@@ -782,25 +865,47 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     zIndex: 3,
   },
-  resultLabel: {
+  resultCallout: {
     position: "absolute",
-    width: "38%",
-    minWidth: 112,
-    maxWidth: 152,
-    minHeight: RESULT_LABEL_HEIGHT,
-    justifyContent: "center",
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderWidth: 1.5,
-    borderRadius: 10,
-    borderCurve: "continuous",
+    height: RESULT_LABEL_HEIGHT,
+    flexDirection: "row",
+    alignItems: "center",
     zIndex: 5,
   },
-  guessLabel: { left: spacing.md, alignItems: "flex-start" },
-  truthLabel: {
-    right: spacing.md,
-    alignItems: "flex-end",
+  guessCallout: { left: spacing.xs, right: "50%" },
+  truthCallout: { left: "50%", right: spacing.xs },
+  resultStem: {
+    flex: 1,
+    minWidth: spacing.sm,
+    height: StyleSheet.hairlineWidth,
   },
-  resultRole: { opacity: 0.9 },
-  markerRef: { fontSize: 15, lineHeight: 20, fontWeight: "700" },
+  resultLabel: {
+    minWidth: 86,
+    maxWidth: "92%",
+    minHeight: RESULT_LABEL_HEIGHT,
+    flexShrink: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderRadius: 0,
+  },
+  resultRole: {
+    fontSize: 11,
+    lineHeight: 12,
+    fontWeight: "600",
+    letterSpacing: 0.7,
+    textAlign: "center",
+  },
+  markerRef: {
+    width: "100%",
+    fontSize: 13,
+    lineHeight: 15,
+    fontWeight: "600",
+    letterSpacing: 0.1,
+    textAlign: "center",
+    fontVariant: ["tabular-nums"],
+  },
 });

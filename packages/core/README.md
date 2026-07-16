@@ -9,7 +9,7 @@ Platform-neutral Versemark domain: scoring, daily seed, game flow, achievements,
 | Scoring, PRNG, daily selection | Canvas / native timeline strip |
 | Books + axis math | DOM / React Native chrome |
 | Mastery + achievements evaluation | Haptics, sounds, install/PWA |
-| Storage **types** + pure mutations via `KvStore` port | `localStorage` / AsyncStorage adapters |
+| Storage **types** + pure mutations via `KvStore` port | `localStorage` / SQLite adapters |
 | Share **text** builders | OS share sheet / clipboard delivery |
 | Appearance scheme hook (`setColorScheme`) | Theme preference UI + CSS tokens |
 
@@ -22,7 +22,7 @@ import { setStorageBackend, createMemoryKvStore, loadState } from "@versemark/co
 setStorageBackend(createMemoryKvStore());
 
 // Web: inject localStorage adapter from apps/web
-// Native: hydrate memory from AsyncStorage at launch, then setStorageBackend
+// Native: inject the synchronous expo-sqlite adapter after one-time migration
 ```
 
 ## Scripts

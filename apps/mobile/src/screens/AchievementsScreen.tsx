@@ -12,13 +12,14 @@ import {
   type ComponentRef,
 } from "react";
 import { LegendList } from "@legendapp/list/react-native";
-import { Image, Platform, Pressable, StyleSheet, Text, View } from "../design-system";
+import { Alert, Image, Platform, Pressable, StyleSheet, Text, View } from "../design-system";
 import {
   bookSegmentAtT,
   bookSegments,
   booksForFocusMode,
   computeMastery,
   formatMiss,
+  genresForFocusMode,
   listAchievements,
   masteryFocusMetric,
   masteryHeatT,
@@ -31,12 +32,14 @@ import {
 } from "@versemark/core";
 import { ThemeButton } from "../components/TopChrome";
 import { CanonRibbon } from "../components/CanonRibbon";
-import { hapticLight } from "../lib/haptics";
+import { EditorialSurface } from "../components/EditorialSurface";
+import { hapticSelection, hapticWarning } from "../lib/haptics";
 import { achievementImages } from "../lib/achievement-images";
+import { progressInsights } from "../lib/progress-insights";
 import { mixHex, radius, spacing } from "../theme";
 import { useTheme } from "../theme-context";
 
-export type AchievementsScreenProps = { appState: AppState };
+export type AchievementsScreenProps = { appState: AppState; onResetProgress: () => void };
 
 const unlockedDateFormatter = new Intl.DateTimeFormat(undefined, {
   day: "numeric",
@@ -137,11 +140,11 @@ function MasteryList({
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? items : items.slice(0, 4);
   return (
-    <View style={[styles.masteryList, { borderColor: colors.borderStrong, backgroundColor: colors.surface }]}>
+    <EditorialSurface style={styles.masteryList}>
       <Pressable
         onPress={() => {
           if (items.length <= 4) return;
-          hapticLight();
+          hapticSelection();
           setExpanded((value) => !value);
         }}
         style={[styles.listHeader, { backgroundColor: colors.surface2 }]}
@@ -184,11 +187,11 @@ function MasteryList({
       {items.length === 0 ? (
         <Text style={[typography.body, styles.listEmpty, { color: colors.ink2 }]}>Finish a few rounds to reveal this view.</Text>
       ) : null}
-    </View>
+    </EditorialSurface>
   );
 }
 
-export function AchievementsScreen({ appState }: AchievementsScreenProps) {
+export function AchievementsScreen({ appState, onResetProgress }: AchievementsScreenProps) {
   const { colors, scheme, typography } = useTheme();
   const mapRef = useRef<ComponentRef<typeof View>>(null);
   const mastery = useMemo(() => computeMastery(appState), [appState]);
@@ -198,21 +201,8 @@ export function AchievementsScreen({ appState }: AchievementsScreenProps) {
   const segments = useMemo(() => bookSegments(), []);
   const catalog = useMemo(() => segments.map((segment) => ({ osis: segment.osis, name: segment.name })), [segments]);
   const books = useMemo(() => booksForFocusMode(mastery, "farther", catalog), [catalog, mastery]);
-  const measuredGenres = useMemo(() => mastery.genres.filter((item) => item.rounds > 0), [mastery.genres]);
-  const insightCandidates = useMemo(
-    () => measuredGenres.length > 1 ? measuredGenres : Object.values(mastery.bookHeat),
-    [mastery.bookHeat, measuredGenres]
-  );
-  const strongest = useMemo(
-    () => [...insightCandidates].sort((a, b) => a.medianDistance - b.medianDistance || b.rounds - a.rounds)[0],
-    [insightCandidates]
-  );
-  const practiceNext = useMemo(
-    () => insightCandidates.length > 1
-      ? [...insightCandidates].sort((a, b) => b.medianDistance - a.medianDistance || b.rounds - a.rounds)[0]
-      : undefined,
-    [insightCandidates]
-  );
+  const genres = useMemo(() => genresForFocusMode(mastery, "farther"), [mastery]);
+  const insights = useMemo(() => progressInsights(mastery), [mastery]);
   const defaultBook = useMemo(
     () => [...Object.values(mastery.bookHeat)].sort((a, b) => b.medianDistance - a.medianDistance)[0],
     [mastery.bookHeat]
@@ -252,12 +242,24 @@ export function AchievementsScreen({ appState }: AchievementsScreenProps) {
     if (width <= 0) return;
     const segment = bookSegmentAtT(x / width, segments);
     if (!segment) return;
-    hapticLight();
+    hapticSelection();
     setSelectedOverride(segment.osis);
   }, [segments]);
 
+  const selectFromMapPress = useCallback((pageX: number, fallbackX: number) => {
+    const map = mapRef.current;
+    if (!map) {
+      selectAt(fallbackX, mapWidth);
+      return;
+    }
+
+    map.measureInWindow((mapX, _mapY, width) => {
+      selectAt(pageX - mapX, width || mapWidth);
+    });
+  }, [mapWidth, selectAt]);
+
   const selectBook = useCallback((item: MasterySlice) => {
-    hapticLight();
+    hapticSelection();
     setSelectedOverride(item.id);
   }, []);
 
@@ -273,6 +275,24 @@ export function AchievementsScreen({ appState }: AchievementsScreenProps) {
       <AchievementRow item={item} last={index === milestoneRows.length - 1} />
     </View>
   ), [milestoneRows.length, milestoneThemeStyle]);
+
+  const confirmReset = useCallback(() => {
+    Alert.alert(
+      "Reset all progress?",
+      "This permanently deletes every round, streak, achievement, and mastery record on this device.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset progress",
+          style: "destructive",
+          onPress: () => {
+            hapticWarning();
+            onResetProgress();
+          },
+        },
+      ]
+    );
+  }, [onResetProgress]);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.bg }]}>
@@ -294,9 +314,9 @@ export function AchievementsScreen({ appState }: AchievementsScreenProps) {
         {next && !showAllMilestones ? (
           <View>
             <Text style={[typography.section, styles.outsideLabel]}>Next milestone</Text>
-            <View style={[styles.log, { borderColor: colors.borderStrong, backgroundColor: colors.surface }]}>
+            <EditorialSurface style={styles.log}>
               <AchievementRow item={next} featured last />
-            </View>
+            </EditorialSurface>
           </View>
         ) : null}
 
@@ -307,12 +327,13 @@ export function AchievementsScreen({ appState }: AchievementsScreenProps) {
           </View>
         ) : (
           <>
-            <View style={[styles.panel, { borderColor: colors.borderStrong, backgroundColor: colors.surface }]}>
+            <EditorialSurface style={styles.panel}>
               <Text style={[typography.section, styles.sectionLabel]}>At a glance</Text>
               <View style={styles.statGrid}>
                 {[
                   ["Rounds", countFormatter.format(mastery.totalRounds)],
                   ["Exact rate", `${exactRate}%`],
+                  ["Close rate", `${insights.closeRate}%`],
                   ["Best streak", countFormatter.format(mastery.bestStreak)],
                 ].map(([label, value]) => (
                   <View key={label} style={styles.statCell}>
@@ -321,30 +342,38 @@ export function AchievementsScreen({ appState }: AchievementsScreenProps) {
                   </View>
                 ))}
               </View>
-            </View>
+            </EditorialSurface>
 
-            {practiceNext ? (
-              <View style={[styles.panel, { borderColor: colors.borderStrong, backgroundColor: colors.surface }]}>
-                <Text style={[typography.section, styles.sectionLabel]}>Your read on the canon</Text>
-                <InsightRow label="Strongest" item={strongest} accent={colors.success} />
+            {insights.bestBook || insights.bestGenre ? (
+              <EditorialSurface style={styles.panel}>
+                <Text style={[typography.section, styles.sectionLabel]}>Strengths and gaps</Text>
+                <InsightRow label="Best book" item={insights.bestBook} accent={colors.success} />
                 <View style={[styles.rowRule, { backgroundColor: colors.rowRule }]} />
-                <InsightRow label="Practice next" item={practiceNext} accent={colors.accent} />
-              </View>
+                <InsightRow label="Book to practice" item={insights.bookToPractice} accent={colors.accent} />
+                <View style={[styles.rowRule, { backgroundColor: colors.rowRule }]} />
+                <InsightRow label="Best genre" item={insights.bestGenre} accent={colors.success} />
+                <View style={[styles.rowRule, { backgroundColor: colors.rowRule }]} />
+                <InsightRow label="Genre to practice" item={insights.genreToPractice} accent={colors.accent} />
+              </EditorialSurface>
             ) : null}
 
-            <View style={[styles.panel, { borderColor: colors.borderStrong, backgroundColor: colors.surface }]}>
+            <EditorialSurface style={styles.panel}>
               <Text style={[typography.section, styles.sectionLabel]}>Canon map</Text>
               <Text style={[typography.body, styles.mapIntro, { color: colors.ink2 }]}>Olive is closer. Terracotta is farther away.</Text>
               <Pressable
                 style={styles.mapHit}
-                onPress={(event) => selectAt(event.nativeEvent.locationX, mapWidth)}
+                onPress={(event) => selectFromMapPress(event.nativeEvent.pageX, event.nativeEvent.locationX)}
+                testID="canon-mastery-map"
                 accessibilityRole="adjustable"
                 accessibilityLabel="Canon mastery by book"
+                accessibilityHint="Tap a position on the map to inspect that book."
+                accessibilityValue={{ text: selectedSegment?.name ?? "No book selected" }}
                 accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
                 onAccessibilityAction={(event) => {
                   const current = Math.max(0, segments.findIndex((segment) => segment.osis === selected));
                   const delta = event.nativeEvent.actionName === "increment" ? 1 : -1;
                   const nextIndex = Math.min(segments.length - 1, Math.max(0, current + delta));
+                  hapticSelection();
                   setSelectedOverride(segments[nextIndex]?.osis ?? selected ?? undefined);
                 }}
               >
@@ -377,16 +406,23 @@ export function AchievementsScreen({ appState }: AchievementsScreenProps) {
                 <Text style={typography.section}>Revelation</Text>
               </View>
               <View style={[styles.mapDetail, { borderColor: colors.rowRule }]}>
-                <Text style={[typography.body, styles.mapName]}>{selectedSegment?.name ?? "Choose a book"}</Text>
+                <Text
+                  testID="canon-map-selected-book"
+                  accessibilityLiveRegion="polite"
+                  style={[typography.body, styles.mapName]}
+                >
+                  {selectedSegment?.name ?? "Choose a book"}
+                </Text>
                 <Text style={[typography.body, styles.mapMeta, { color: colors.ink2 }]}>
                   {selectedSlice
                     ? `${formatMiss(selectedSlice.medianDistance)} · ${selectedSlice.rounds} round${selectedSlice.rounds === 1 ? "" : "s"}`
                     : selectedSegment ? "Not tested yet" : "Tap the map to inspect a book."}
                 </Text>
               </View>
-            </View>
+            </EditorialSurface>
 
             {books.length > 1 ? <MasteryList title="Books to practice" items={books} selected={selected} onSelect={selectBook} /> : null}
+            {genres.length > 0 ? <MasteryList title="Genres to practice" items={genres} /> : null}
           </>
         )}
 
@@ -395,7 +431,7 @@ export function AchievementsScreen({ appState }: AchievementsScreenProps) {
             <Text style={[typography.section, styles.outsideLabel, styles.sectionHeaderLabel]}>Milestones · {counts.unlocked}</Text>
             <Pressable
               onPress={() => {
-                hapticLight();
+                hapticSelection();
                 setShowAllMilestones((value) => !value);
               }}
               accessibilityRole="button"
@@ -406,6 +442,23 @@ export function AchievementsScreen({ appState }: AchievementsScreenProps) {
             </Pressable>
           </View>
         </View>
+          </View>
+        )}
+        ListFooterComponent={(
+          <View style={[styles.resetSection, { borderTopColor: colors.rowRule }]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Reset all progress"
+              accessibilityHint="Permanently deletes rounds, streaks, achievements, and mastery history"
+              onPress={confirmReset}
+              style={({ pressed }) => [
+                styles.resetButton,
+                { borderColor: colors.error },
+                pressed ? styles.resetPressed : null,
+              ]}
+            >
+              <Text style={[styles.resetLabel, { color: colors.error }]}>Reset progress</Text>
+            </Pressable>
           </View>
         )}
       />
@@ -420,13 +473,13 @@ const styles = StyleSheet.create({
   title: { fontWeight: "700", fontSize: 30, lineHeight: 36 },
   body: { width: "100%", paddingBottom: spacing.xxxl },
   headerContent: { gap: spacing.lg, paddingHorizontal: spacing.lg },
-  panel: { borderWidth: 1, borderRadius: radius.panel, borderCurve: "continuous", padding: spacing.md },
+  panel: { padding: spacing.md },
   sectionLabel: { marginBottom: spacing.sm },
   outsideLabel: { marginBottom: spacing.sm },
   emptyState: { paddingVertical: spacing.xl, flexDirection: "row", alignItems: "center", gap: spacing.xl },
   emptyTitle: { flex: 1, maxWidth: 260, fontSize: 22, lineHeight: 29, fontWeight: "700" },
-  statGrid: { flexDirection: "row" },
-  statCell: { flex: 1, paddingVertical: spacing.xs },
+  statGrid: { flexDirection: "row", flexWrap: "wrap", columnGap: spacing.md, rowGap: spacing.md },
+  statCell: { flexGrow: 1, flexBasis: 140, minWidth: 120, paddingVertical: spacing.xs },
   statValue: { fontSize: 20, lineHeight: 26, fontWeight: "700", fontVariant: ["tabular-nums"] },
   insightRow: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: spacing.md },
   insightMark: { width: 8, height: 8, transform: [{ rotate: "45deg" }] },
@@ -443,7 +496,7 @@ const styles = StyleSheet.create({
   mapDetail: { marginTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: spacing.sm },
   mapName: { fontSize: 15, lineHeight: 20, fontWeight: "700" },
   mapMeta: { fontSize: 13, lineHeight: 19 },
-  masteryList: { borderWidth: 1 },
+  masteryList: {},
   listHeader: { minHeight: spacing.touch, paddingHorizontal: spacing.md, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   listChevron: { width: 9, height: 9, marginRight: spacing.xs, borderRightWidth: 1.5, borderBottomWidth: 1.5 },
   masteryRow: { minHeight: spacing.touch, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: spacing.md },
@@ -454,19 +507,23 @@ const styles = StyleSheet.create({
   sectionHeaderLabel: { marginBottom: 0 },
   allButton: { minHeight: spacing.touch, justifyContent: "center", paddingLeft: spacing.lg },
   allButtonText: { fontSize: 14, lineHeight: 20, fontWeight: "700" },
-  log: { borderWidth: 1 },
+  log: {},
   milestoneRowFrame: { borderLeftWidth: 1, borderRightWidth: 1, marginHorizontal: spacing.lg },
   milestoneRowFirst: { borderTopWidth: 1 },
   milestoneRowLast: { borderBottomWidth: 1 },
   achievementRow: { flexDirection: "row", gap: spacing.md, padding: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth },
   lastRow: { borderBottomWidth: 0 },
   locked: { opacity: 0.68 },
-  dropCap: { width: 48, height: 48, borderWidth: 1.5, alignItems: "center", justifyContent: "center", borderRadius: radius.dropcap, borderCurve: "continuous" },
+  dropCap: { width: 48, height: 48, borderWidth: 1.5, alignItems: "center", justifyContent: "center", borderRadius: radius.artwork, borderCurve: "continuous" },
   dropCapFeatured: { width: 60, height: 60 },
   dropCapLetter: { fontFamily: "Georgia", fontSize: 27, fontWeight: "600" },
-  dropCapImage: { width: "100%", height: "100%", borderRadius: radius.dropcap - 1, borderCurve: "continuous" },
+  dropCapImage: { width: "100%", height: "100%", borderRadius: radius.artwork - 1, borderCurve: "continuous" },
   achievementCopy: { flex: 1, gap: 2 },
   achievementTitle: { fontSize: 15, lineHeight: 20, fontWeight: "700" },
   achievementDesc: { fontSize: 13, lineHeight: 18 },
   progress: { height: 3, width: "100%", marginTop: spacing.xs, overflow: "hidden" },
+  resetSection: { marginHorizontal: spacing.lg, marginTop: spacing.xl, paddingTop: spacing.xl, paddingBottom: spacing.xxxl, borderTopWidth: StyleSheet.hairlineWidth },
+  resetButton: { minHeight: spacing.touch, borderWidth: 1, borderRadius: radius.editorial, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.lg },
+  resetLabel: { fontSize: 15, lineHeight: 20, fontWeight: "700" },
+  resetPressed: { opacity: 0.62 },
 });

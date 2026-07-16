@@ -9,6 +9,7 @@ export {
   Alert,
   Animated,
   Easing,
+  Keyboard,
   KeyboardAvoidingView,
   PanResponder,
   Platform,

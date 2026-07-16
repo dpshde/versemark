@@ -2,6 +2,7 @@ import {
   DarkTheme,
   DefaultTheme,
   NavigationContainer,
+  StackActions,
   useFocusEffect,
   useNavigationContainerRef,
   type Theme,
@@ -24,6 +25,7 @@ import { TranslationButton } from "../components/TopChrome";
 import { AchievementsScreen } from "../screens/AchievementsScreen";
 import { HomeScreen } from "../screens/HomeScreen";
 import { PlayScreen } from "../screens/PlayScreen";
+import { hapticSelection } from "../lib/haptics";
 import { fontFamily } from "../theme";
 import { useTheme } from "../theme-context";
 import {
@@ -53,6 +55,7 @@ export type RootNavigatorProps = {
   onStartDaily: () => void;
   onStartEndless: () => void;
   onProgressFocus: () => void;
+  onResetProgress: () => void;
   onExitRound: () => void;
   onTranslation: (translation: TranslationId) => void;
   onRoundChange: (round: RoundData) => void;
@@ -67,31 +70,26 @@ const NativeTabs = Platform.OS === "web"
   ? null
   : createNativeBottomTabNavigator<MainTabParamList>();
 
-function PlayTabIcon({ color }: { color: string }) {
-  return (
-    <View style={styles.tabIconFrame}>
-      <View style={[styles.playTabIcon, { borderLeftColor: color }]} />
-    </View>
-  );
-}
-
 function ProgressRoute({
   appState,
   onFocus,
+  onResetProgress,
 }: {
   appState: AppState;
   onFocus: () => void;
+  onResetProgress: () => void;
 }) {
   useFocusEffect(useCallback(() => {
     onFocus();
   }, [onFocus]));
 
-  return <AchievementsScreen appState={appState} />;
+  return <AchievementsScreen appState={appState} onResetProgress={onResetProgress} />;
 }
 
 function RoundRoute({
   navigation,
   route,
+  appState,
   round,
   texts,
   translation,
@@ -104,6 +102,7 @@ function RoundRoute({
 }: NativeStackScreenProps<RootStackParamList, "Round"> & Pick<
   RootNavigatorProps,
   | "round"
+  | "appState"
   | "texts"
   | "translation"
   | "onExitRound"
@@ -139,6 +138,8 @@ function RoundRoute({
       key={`${round.mode}-${round.poolItem.ref}-${round.daily?.index ?? "e"}-${round.phase}`}
       round={round}
       texts={texts}
+      deviceId={appState.deviceId}
+      translation={translation}
       onRoundChange={onRoundChange}
       onAppState={onAppState}
       onUnlocks={onUnlocks}
@@ -153,6 +154,7 @@ export function RootNavigator(props: RootNavigatorProps) {
   const {
     appState,
     onProgressFocus,
+    onResetProgress,
     onStartDaily,
     onStartEndless,
   } = props;
@@ -182,13 +184,22 @@ export function RootNavigator(props: RootNavigatorProps) {
     navigationRef.navigate("Round", { mode: "endless" });
   }, [navigationRef, onStartEndless]);
 
+  const leaveRoundForTab = useCallback(() => {
+    hapticSelection();
+    if (navigationRef.isReady() && navigationRef.getCurrentRoute()?.name === "Round") {
+      navigationRef.dispatch(StackActions.popToTop());
+    }
+  }, [navigationRef]);
+
   const playContent = (
-    <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
+    <SafeAreaView style={styles.screen} edges={["top", "bottom", "left", "right"]}>
       <HomeScreen appState={appState} onDaily={startDaily} onEndless={startEndless} />
     </SafeAreaView>
   );
   const progressContent = (
-    <ProgressRoute appState={appState} onFocus={onProgressFocus} />
+    <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
+      <ProgressRoute appState={appState} onFocus={onProgressFocus} onResetProgress={onResetProgress} />
+    </SafeAreaView>
   );
 
   const tabs = NativeTabs ? (
@@ -197,32 +208,42 @@ export function RootNavigator(props: RootNavigatorProps) {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: Platform.OS === "android" ? colors.accentDeep : colors.accent,
-        tabBarInactiveTintColor: colors.ink2,
-        tabBarActiveIndicatorColor: colors.accentSoft,
-        tabBarActiveIndicatorEnabled: Platform.OS === "android",
-        tabBarRippleColor: colors.accentSoft,
-        tabBarLabelVisibilityMode: "labeled",
-        tabBarLabelStyle: { fontFamily, fontSize: 12, fontWeight: "600" },
         tabBarBadgeStyle: { backgroundColor: colors.accent, color: colors.onAccent },
-        tabBarStyle: { backgroundColor: colors.bg, shadowColor: colors.border },
         tabBarControllerMode: "auto",
         tabBarMinimizeBehavior: "onScrollDown",
+        ...(Platform.OS === "ios"
+          ? {
+              // UIKit owns the bar material and typography. Xcode 26 + iOS 26
+              // render this native UITabBarController as Liquid Glass.
+              tabBarBlurEffect: "systemDefault" as const,
+            }
+          : {
+              tabBarInactiveTintColor: colors.ink2,
+              tabBarActiveIndicatorColor: colors.accentSoft,
+              tabBarActiveIndicatorEnabled: true,
+              tabBarRippleColor: colors.accentSoft,
+              tabBarLabelVisibilityMode: "labeled" as const,
+              tabBarLabelStyle: { fontFamily, fontSize: 12, fontWeight: "600" as const },
+              tabBarStyle: { backgroundColor: colors.bg },
+            }),
       }}
     >
       <NativeTabs.Screen
         name="Play"
+        listeners={{ tabPress: leaveRoundForTab }}
         options={{
           title: "Play",
           tabBarLabel: "Play",
           tabBarIcon: ({ focused }) => Platform.OS === "ios"
-            ? { type: "sfSymbol", name: focused ? "play.fill" : "play" }
-            : { type: "image", source: require("../../assets/tab-play.png") },
+            ? { type: "sfSymbol", name: focused ? "book.fill" : "book" }
+            : { type: "image", source: require("../../assets/tab-book.png") },
         }}
       >
         {() => playContent}
       </NativeTabs.Screen>
       <NativeTabs.Screen
         name="Progress"
+        listeners={{ tabPress: leaveRoundForTab }}
         options={{
           title: "Progress",
           tabBarLabel: "Progress",
@@ -260,7 +281,14 @@ export function RootNavigator(props: RootNavigatorProps) {
         options={{
           title: "Play",
           tabBarLabel: "Play",
-          tabBarIcon: ({ color }) => <PlayTabIcon color={color} />,
+          tabBarIcon: ({ color }) => (
+            <Image
+              source={require("../../assets/tab-book.png")}
+              style={styles.tabIcon}
+              tintColor={color}
+              contentFit="contain"
+            />
+          ),
         }}
       >
         {() => playContent}
@@ -313,15 +341,4 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   loading: { flex: 1, alignItems: "center", justifyContent: "center" },
   tabIcon: { width: 22, height: 22 },
-  tabIconFrame: { width: 22, height: 22, alignItems: "center", justifyContent: "center" },
-  playTabIcon: {
-    width: 0,
-    height: 0,
-    marginLeft: 3,
-    borderTopWidth: 7,
-    borderBottomWidth: 7,
-    borderLeftWidth: 12,
-    borderTopColor: "transparent",
-    borderBottomColor: "transparent",
-  },
 });

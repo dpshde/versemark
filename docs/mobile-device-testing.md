@@ -68,6 +68,19 @@ pnpm --filter @versemark/mobile exec expo run:ios --device
 
 Use Xcode's Features > Location and Environment Overrides, or the simulator Settings app, to test appearance and accessibility variants.
 
+#### Native tab bar material
+
+The iOS client uses React Navigation's native bottom tabs, backed by `UITabBarController`. When the app is built with Xcode 26 or newer and runs on iOS 26 or newer, UIKit supplies the Liquid Glass tab bar and selection behavior automatically. The app must not wrap this navigation bar in a custom `GlassView` or recreate it with JavaScript blur layers.
+
+On iOS 18 and earlier, the same navigator falls back to UIKit's system-default tab-bar blur. Android keeps its native `BottomNavigationView` styling, and React Native Web intentionally uses a separate non-native preview bar; the browser cannot verify Liquid Glass.
+
+For tab-bar changes, verify on an iOS 26 simulator or device that:
+
+- content remains readable while it scrolls beneath the material;
+- the selected SF Symbol and label stay legible in light and dark appearances;
+- Reduce Transparency and Increase Contrast produce a usable system fallback;
+- scrolling down minimizes the bar and scrolling back up restores it without covering content.
+
 ### Physical iPhone or iPad
 
 The complete signing and USB setup is in [`apps/mobile/README.md`](../apps/mobile/README.md). The normal command is:

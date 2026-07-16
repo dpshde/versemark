@@ -29,10 +29,15 @@ export function hapticConfirm(): void {
   void run(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium));
 }
 
-/** Result reveal — success = exact/near; otherwise medium. */
-export function hapticResult(exactOrNear: boolean): void {
+/** Invalid committed input or another recoverable warning. */
+export function hapticWarning(): void {
+  void run(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning));
+}
+
+/** Result reveal — exact is success; a miss gets one decisive impact. */
+export function hapticResult(exact: boolean): void {
   void run(() =>
-    exactOrNear
+    exact
       ? Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       : Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
   );

@@ -23,9 +23,12 @@ import {
   recordHintClick,
   localDateKey,
   loadState,
+  createRecordId,
   type AppState,
   type DailyRoundRecord,
+  type HintEvent,
   type RoundRecord,
+  type TranslationId,
 } from "./storage";
 import {
   evaluateAchievements,
@@ -45,6 +48,10 @@ export interface RoundData {
   phase: "playing" | "revealed";
   guessVerseIndex: number | null;
   result: ScoreResult | null;
+  /** Start of the active verse attempt, used for durable duration metadata. */
+  startedAt: string;
+  /** Ordered hint disclosures for future achievement rules. */
+  hintEvents: HintEvent[];
   daily: {
     index: number;
     items: PoolItem[];
@@ -52,16 +59,17 @@ export interface RoundData {
   } | null;
 }
 
-export interface DailyVerseResult {
-  trueRef: string;
-  trueVerseIndex: number;
-  trueRangeEndVerseIndex?: number;
-  guessVerseIndex: number;
-  distance: number;
-  total: number;
+export interface DailyVerseResult extends Omit<RoundRecord, "hintStep"> {
   hintStep: HintStep;
-  at?: string;
-  source?: "daily" | "practice";
+}
+
+export interface RoundEventContext {
+  deviceId?: string;
+  userId?: string | null;
+  appVersion?: string;
+  rulesVersion?: string;
+  contentVersion?: string;
+  translation?: TranslationId;
 }
 
 function rangeEndVerseIndex(item: PoolItem): number {
@@ -76,10 +84,14 @@ function toRoundRecord(
   total: number,
   hintStep: number,
   source: "daily" | "practice",
-  at: string
+  at: string,
+  startedAt: string,
+  hintEvents: HintEvent[],
+  context: RoundEventContext
 ): RoundRecord {
   const start = trueVerseIndex(item);
   return {
+    eventId: createRecordId("round", new Date(at)),
     trueRef: item.ref,
     trueVerseIndex: start,
     trueRangeEndVerseIndex: rangeEndVerseIndex(item),
@@ -88,7 +100,17 @@ function toRoundRecord(
     total,
     hintStep,
     at,
+    occurredAt: at,
     source,
+    deviceId: context.deviceId,
+    userId: context.userId ?? null,
+    revision: 1,
+    appVersion: context.appVersion ?? "unknown",
+    rulesVersion: context.rulesVersion ?? "1",
+    contentVersion: context.contentVersion ?? "1",
+    translation: context.translation,
+    durationMs: Math.max(0, Date.parse(at) - Date.parse(startedAt)),
+    hintEvents: [...hintEvents],
   };
 }
 
@@ -129,7 +151,8 @@ function bindVerse(
   index: number,
   texts: TextBundle,
   results: DailyVerseResult[],
-  revealed: DailyRoundRecord | null
+  revealed: DailyRoundRecord | null,
+  now: Date = new Date()
 ): RoundData {
   const item = items[index];
   const verseKey = item.ref;
@@ -144,6 +167,8 @@ function bindVerse(
       phase: "revealed",
       guessVerseIndex: revealed.guessVerseIndex,
       result: scoreResultFromSaved(revealed),
+      startedAt: revealed.occurredAt ?? revealed.at,
+      hintEvents: revealed.hintEvents ?? [],
       daily: { index, items, results },
     };
   }
@@ -157,6 +182,8 @@ function bindVerse(
     phase: "playing",
     guessVerseIndex: null,
     result: null,
+    startedAt: now.toISOString(),
+    hintEvents: [],
     daily: { index, items, results },
   };
 }
@@ -167,7 +194,7 @@ export function startDailyRound(
   now: Date = new Date()
 ): RoundData {
   const n = todayPuzzleNumber(now);
-  return startDailyRoundForPuzzle(pool, texts, n);
+  return startDailyRoundForPuzzle(pool, texts, n, now);
 }
 
 /**
@@ -178,7 +205,8 @@ export function startDailyRound(
 export function startDailyRoundForPuzzle(
   pool: PoolItem[],
   texts: TextBundle,
-  n: number
+  n: number,
+  now: Date = new Date()
 ): RoundData {
   const existing = getDailyForPuzzle(n);
   const items = selectPoolItemsForPuzzle(n, pool);
@@ -188,21 +216,22 @@ export function startDailyRoundForPuzzle(
     // Complete: land on the last verse, fully revealed (summary + share).
     const index = items.length - 1;
     const results = saved.slice(0, items.length) as DailyVerseResult[];
-    return bindVerse(n, items, index, texts, results, saved[index]);
+    return bindVerse(n, items, index, texts, results, saved[index], now);
   }
   if (saved.length > 0) {
     // Partial: show the last confirmed verse revealed (Next continues).
     const index = saved.length - 1;
     const results = saved as DailyVerseResult[];
-    return bindVerse(n, items, index, texts, results, saved[index]);
+    return bindVerse(n, items, index, texts, results, saved[index], now);
   }
 
-  return bindVerse(n, items, 0, texts, [], null);
+  return bindVerse(n, items, 0, texts, [], null, now);
 }
 
 export function startEndlessRound(
   pool: PoolItem[],
-  texts: TextBundle
+  texts: TextBundle,
+  now: Date = new Date()
 ): RoundData {
   const item = selectEndlessItem(pool);
   const verseKey = item.ref;
@@ -216,11 +245,13 @@ export function startEndlessRound(
     phase: "playing",
     guessVerseIndex: null,
     result: null,
+    startedAt: now.toISOString(),
+    hintEvents: [],
     daily: null,
   };
 }
 
-export function advanceDailyRound(round: RoundData, texts: TextBundle): RoundData {
+export function advanceDailyRound(round: RoundData, texts: TextBundle, now: Date = new Date()): RoundData {
   if (!round.daily || round.phase !== "revealed") return round;
   const index = round.daily.index + 1;
   if (index >= round.daily.items.length) return round;
@@ -234,6 +265,8 @@ export function advanceDailyRound(round: RoundData, texts: TextBundle): RoundDat
     phase: "playing",
     guessVerseIndex: null,
     result: null,
+    startedAt: now.toISOString(),
+    hintEvents: [],
     daily: { ...round.daily, index },
   };
 }
@@ -267,19 +300,24 @@ export function canTakeHint(round: RoundData): boolean {
   return true;
 }
 
-export function takeHint(round: RoundData): RoundData {
+export function takeHint(round: RoundData, now: Date = new Date()): RoundData {
   if (!canTakeHint(round)) return round;
   // Step 2 with a singleton paragraph still only costs one tier (×2);
   // makeHintPanel surfaces the testament-half label instead of the verse again.
   const next = Math.min(3, (round.hintStep + 1) as HintStep) as HintStep;
   recordHintClick();
-  return { ...round, hintStep: next };
+  return {
+    ...round,
+    hintStep: next,
+    hintEvents: [...round.hintEvents, { step: next, occurredAt: now.toISOString() }],
+  };
 }
 
 export function confirmGuess(
   round: RoundData,
   guessVerseIndex: number,
-  now: Date = new Date()
+  now: Date = new Date(),
+  context: RoundEventContext = {}
 ): { round: RoundData; appState: AppState | null; newlyUnlocked: string[] } {
   if (round.phase !== "playing") {
     return { round, appState: null, newlyUnlocked: [] };
@@ -287,17 +325,20 @@ export function confirmGuess(
   const truth = trueVerseIndex(round.poolItem);
   const result = scoreRound(guessVerseIndex, truth, round.hintStep);
   const at = now.toISOString();
-  const verseResult: DailyVerseResult = {
-    trueRef: round.poolItem.ref,
-    trueVerseIndex: truth,
-    trueRangeEndVerseIndex: rangeEndVerseIndex(round.poolItem),
+  const deviceId = context.deviceId ?? loadState().deviceId;
+  const finishedRecord = toRoundRecord(
+    round.poolItem,
     guessVerseIndex,
-    distance: result.distance,
-    total: result.total,
-    hintStep: result.hintStep,
+    result.distance,
+    result.total,
+    result.hintStep,
+    round.mode === "endless" ? "practice" : "daily",
     at,
-    source: round.mode === "endless" ? "practice" : "daily",
-  };
+    round.startedAt,
+    round.hintEvents,
+    { ...context, deviceId }
+  );
+  const verseResult: DailyVerseResult = { ...finishedRecord, hintStep: result.hintStep };
   const next: RoundData = {
     ...round,
     phase: "revealed",
@@ -315,15 +356,6 @@ export function confirmGuess(
   let appState: AppState | null = null;
   let newlyUnlocked: string[] = [];
 
-  const finishedRecord = toRoundRecord(
-    round.poolItem,
-    guessVerseIndex,
-    result.distance,
-    result.total,
-    result.hintStep,
-    round.mode === "endless" ? "practice" : "daily",
-    at
-  );
   const flags = lifetimeFlagsForRound(finishedRecord);
 
   // Persist after every confirmed daily verse so refresh mid-run resumes.
@@ -332,18 +364,7 @@ export function confirmGuess(
     const results = next.daily.results;
     const complete = results.length >= next.daily.items.length;
     const aggregate = results.reduce((sum, item) => sum + item.total, 0);
-    const rounds: RoundRecord[] = results.map((r) => ({
-      trueRef: r.trueRef,
-      trueVerseIndex: r.trueVerseIndex,
-      trueRangeEndVerseIndex:
-        r.trueRangeEndVerseIndex ?? r.trueVerseIndex,
-      guessVerseIndex: r.guessVerseIndex,
-      distance: r.distance,
-      total: r.total,
-      hintStep: r.hintStep,
-      at: r.at ?? at,
-      source: "daily" as const,
-    }));
+    const rounds: RoundRecord[] = results.map((record) => ({ ...record, source: "daily" as const }));
     appState = recordDailyScoredRound(
       {
         puzzleNumber: round.puzzleNumber,

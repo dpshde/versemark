@@ -53,11 +53,11 @@ Shipped data under `apps/web/public/data/` and `packages/core/src/data/` is comm
 | --- | --- |
 | Layout | npm workspaces monorepo |
 | Domain | `@versemark/core` — no DOM / Canvas / localStorage |
-| Mobile | Expo + React Native; storage via `KvStore` (memory now, AsyncStorage later) |
+| Mobile | Expo + React Native; transactional SQLite snapshot, immutable events, and sync outbox |
 | Web | Vite + TypeScript, Canvas 2D timeline, localStorage adapter |
 | Daily | Epoch `2026-08-01` local = #1; seed `"versemark#" + N` |
 | Score | distance × hint multiplier (see core `scoring.ts`) |
-| State | Durable counters/rollups; platform injects persistence |
+| State | Schema-versioned snapshot plus durable counters/rollups; platform injects persistence |
 
 ## Production deploy (web)
 

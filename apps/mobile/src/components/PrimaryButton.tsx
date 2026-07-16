@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
     minHeight: spacing.touch,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    borderRadius: radius.btn,
+    borderRadius: radius.editorial,
     borderCurve: "continuous",
     borderWidth: 1,
     borderColor: "transparent",

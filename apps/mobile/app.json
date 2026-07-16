@@ -23,7 +23,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#faf8f4"
+        "backgroundColor": "#fbfaf9"
       },
       "package": "app.versemark.mobile"
     },

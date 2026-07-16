@@ -1,7 +1,7 @@
 import type { TranslationId } from "@versemark/core";
 import { ActionSheetIOS, Alert, Platform, Pressable, StyleSheet, Text, View } from "../design-system";
 import { useTheme } from "../theme-context";
-import { hapticLight } from "../lib/haptics";
+import { hapticLight, hapticSelection } from "../lib/haptics";
 
 export function ThemeButton() {
   const { colors, preference, cycleTheme } = useTheme();
@@ -9,7 +9,7 @@ export function ThemeButton() {
   return (
     <Pressable
       onPress={() => {
-        hapticLight();
+        hapticSelection();
         cycleTheme();
       }}
       accessibilityRole="button"
@@ -34,6 +34,10 @@ export function TranslationButton({
 }) {
   const { colors, typography } = useTheme();
   const label = translation.toUpperCase();
+  const selectTranslation = (next: TranslationId) => {
+    hapticSelection();
+    onTranslation(next);
+  };
   const choose = () => {
     hapticLight();
     if (Platform.OS === "ios") {
@@ -44,21 +48,21 @@ export function TranslationButton({
           cancelButtonIndex: 0,
         },
         (index) => {
-          if (index === 1) onTranslation("bsb");
-          if (index === 2) onTranslation("kjv");
+          if (index === 1) selectTranslation("bsb");
+          if (index === 2) selectTranslation("kjv");
         }
       );
       return;
     }
     if (Platform.OS === "android") {
       Alert.alert("Translation", undefined, [
-        { text: "Berean Standard Bible", onPress: () => onTranslation("bsb") },
-        { text: "King James Version", onPress: () => onTranslation("kjv") },
+        { text: "Berean Standard Bible", onPress: () => selectTranslation("bsb") },
+        { text: "King James Version", onPress: () => selectTranslation("kjv") },
         { text: "Cancel", style: "cancel" },
       ]);
       return;
     }
-    onTranslation(translation === "bsb" ? "kjv" : "bsb");
+    selectTranslation(translation === "bsb" ? "kjv" : "bsb");
   };
 
   return (

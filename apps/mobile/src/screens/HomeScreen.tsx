@@ -59,60 +59,64 @@ export function HomeScreen({
       </View>
 
       <View style={styles.panel}>
-        {/* Versem◆rk wordmark */}
-        <View style={styles.wordmarkRow} accessibilityRole="header">
-          <Text style={typography.display}>Versem</Text>
-          <View style={[styles.pin, { backgroundColor: colors.accent }]} accessibilityElementsHidden />
-          <Text style={typography.display}>rk</Text>
-        </View>
-
-        <View style={styles.bookmark}>
-          <CanonRibbon
-            horizontal
-            width={184}
-            height={20}
-            markerAt={streakMarkerProgress(appState.streak)}
-            markerFlameLevel={streakFlameLevel(appState.streak)}
-          />
-        </View>
-
-        <View style={styles.dailyHeader}>
-          <View style={styles.statusRow}>
-            <Text style={[typography.body, styles.date, { color: colors.ink2 }]}>{todayLabel}</Text>
-            {appState.streak > 0 ? (
-              <Text style={[typography.label, styles.streak, { color: colors.ink3 }]}>
-                Streak {appState.streak}{appState.bestStreak > appState.streak ? ` · Best ${appState.bestStreak}` : ""}
-              </Text>
-            ) : null}
+        <View style={styles.topSpacer} />
+        <View style={styles.cluster}>
+          {/* Versem◆rk wordmark */}
+          <View style={styles.wordmarkRow} accessibilityRole="header">
+            <Text style={typography.display}>Versem</Text>
+            <View style={[styles.pin, { backgroundColor: colors.accent }]} accessibilityElementsHidden />
+            <Text style={typography.display}>rk</Text>
           </View>
-          <View style={styles.progressRow} accessibilityLabel={`${completedVerses} of ${DAILY_VERSE_COUNT} verses finished`}>
-            {Array.from({ length: DAILY_VERSE_COUNT }, (_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.progressMark,
-                  { borderColor: index < completedVerses ? colors.accent : colors.borderStrong },
-                  index < completedVerses ? { backgroundColor: colors.accent } : null,
-                ]}
-              />
-            ))}
+
+          <View style={styles.bookmark}>
+            <CanonRibbon
+              horizontal
+              width={184}
+              height={20}
+              markerAt={streakMarkerProgress(appState.streak)}
+              markerFlameLevel={streakFlameLevel(appState.streak)}
+            />
+          </View>
+
+          <View style={styles.dailyHeader}>
+            <View style={styles.statusRow}>
+              <Text style={[typography.body, styles.date, { color: colors.ink2 }]}>{todayLabel}</Text>
+              {appState.streak > 0 ? (
+                <Text style={[typography.label, styles.streak, { color: colors.ink3 }]}>
+                  Streak {appState.streak}{appState.bestStreak > appState.streak ? ` · Best ${appState.bestStreak}` : ""}
+                </Text>
+              ) : null}
+            </View>
+            <View style={styles.progressRow} accessibilityLabel={`${completedVerses} of ${DAILY_VERSE_COUNT} verses finished`}>
+              {Array.from({ length: DAILY_VERSE_COUNT }, (_, index) => (
+                <View
+                  key={index}
+                  style={[
+                    styles.progressMark,
+                    { borderColor: index < completedVerses ? colors.accent : colors.borderStrong },
+                    index < completedVerses ? { backgroundColor: colors.accent } : null,
+                  ]}
+                />
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.btnRow}>
+            <PrimaryButton
+              label={dailyAction}
+              onPress={onDaily}
+              accessibilityHint="Open today's daily game"
+              supportingText={dailySupport}
+            />
+            <PrimaryButton
+              label="Practice"
+              onPress={onEndless}
+              variant="secondary"
+              accessibilityHint="Practice rounds without a daily limit"
+            />
           </View>
         </View>
-
-        <View style={styles.btnRow}>
-          <PrimaryButton
-            label={dailyAction}
-            onPress={onDaily}
-            accessibilityHint="Open today's daily game"
-            supportingText={dailySupport}
-          />
-          <PrimaryButton
-            label="Practice"
-            onPress={onEndless}
-            variant="secondary"
-            accessibilityHint="Practice rounds without a daily limit"
-          />
-        </View>
+        <View style={styles.bottomSpacer} />
       </View>
     </View>
   );
@@ -133,7 +137,6 @@ const styles = StyleSheet.create({
   },
   panel: {
     flex: 1,
-    justifyContent: "center",
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.xxxl,
     paddingBottom: spacing.xxxl,
@@ -141,6 +144,9 @@ const styles = StyleSheet.create({
     width: "100%",
     alignItems: "center",
   },
+  topSpacer: { flex: 4 },
+  cluster: { flexShrink: 0, width: "100%", alignItems: "center" },
+  bottomSpacer: { flex: 6 },
   wordmarkRow: {
     flexDirection: "row",
     alignItems: "baseline",

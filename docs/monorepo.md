@@ -24,12 +24,12 @@ Versemark is an **npm workspaces** monorepo. Mobile (Expo / React Native) is the
 
 ## Storage boundary
 
-Core never calls `localStorage` or AsyncStorage. Apps inject a `KvStore`:
+Core never calls `localStorage`, AsyncStorage, or SQLite. Apps inject a `KvStore`:
 
 ```ts
 import { setStorageBackend, createMemoryKvStore } from "@versemark/core";
 // web: createLocalStorageKvStore() from apps/web/src/lib/storage-web.ts
-// mobile: memory now; AsyncStorage hydrate later
+// mobile: synchronous expo-sqlite adapter; AsyncStorage is migration-only
 setStorageBackend(adapter);
 ```
 

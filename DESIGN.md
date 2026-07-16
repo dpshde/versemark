@@ -86,9 +86,8 @@ typography:
     lineHeight: 1.2
     letterSpacing: "-0.01em"
 rounded:
-  panel: "0px"
-  btn: "0px"
-  dropcap: "4px"
+  editorial: "0px"
+  artwork: "4px"
   pill: "999px"
 spacing:
   xs: "4px"
@@ -106,20 +105,20 @@ components:
   button-primary:
     backgroundColor: "{colors.accent}"
     textColor: "#fff"
-    rounded: "{rounded.panel}"
+    rounded: "{rounded.editorial}"
     padding: "0.75rem 1.25rem"
     height: "44px"
   button-secondary:
     backgroundColor: "transparent"
     textColor: "{colors.ink-2}"
     border: "1px solid {colors.border-strong}"
-    rounded: "{rounded.panel}"
+    rounded: "{rounded.editorial}"
     padding: "0.75rem 1.25rem"
     height: "44px"
   panel:
     backgroundColor: "{colors.surface}"
     border: "1px solid {colors.border-strong}"
-    rounded: "{rounded.panel}"
+    rounded: "{rounded.editorial}"
     padding: "{spacing.md}"
   segmented-control:
     backgroundColor: "{colors.surface-2}"
@@ -142,11 +141,18 @@ components:
 
 A quiet daily ritual: a verse, a timeline of the canon, a marker laid down. Warmth comes from **serif type** and a **single terracotta accent**, not from a tinted page. No glow, foil, cream parchment, or kitsch gamification.
 
-Two surface modes share one token set:
+Two material layers share one token set. They do not mix jobs:
+
+| Layer | Job | Material |
+| --- | --- | --- |
+| **Native chrome** | Stack navigation and tab bar only | System-owned Liquid Glass on supported Apple hardware; Versemark does not recreate or decorate it |
+| **Versemark content** | Scripture, canon, results, progress, achievements | Flat editorial surfaces, square geometry, hairlines, no blur |
+
+Within the Versemark content layer, two surface modes organize information:
 
 | Surface | Job | Material |
 | --- | --- | --- |
-| **Play** | The canon is the board | Full-bleed timeline; chrome is type-only overlay |
+| **Play** | The canon is the board | Full-bleed timeline; native chrome ends at navigation, while the commit dock stays square and editorial |
 | **Secondary** (home, achievements) | Progress, mastery, unlocks | Square hairline **panels** on `--surface`, narrow measure |
 
 The achievements screen is the reference for secondary UI. It is a **flat scroll ledger**: Lifetime summary → Canon heat map → Farther/Coverage/Closer focus lists → Next checkpoint → full Unlocks log. Square hairline panels, drop-cap rows, all data on one scroll — not a story deck. Prefer that pattern over inventing new card chrome.
@@ -180,7 +186,7 @@ Near-black page (low chroma — not muddy brown). Surfaces step up cleanly. Acce
 
 ## Typography
 
-Book serif throughout (Charter stack). One family for display, body, labels, and data.
+On native, SF/System carries navigation, controls, labels, and data. The literary serif is reserved for Scripture, the wordmark, and expressive canon references. Web may retain the Charter stack more broadly, but should preserve the same role boundary rather than introducing another display face.
 
 | Role | Use |
 | --- | --- |
@@ -193,6 +199,8 @@ Book serif throughout (Charter stack). One family for display, body, labels, and
 Data rows use lining/tabular nums. Body may keep oldstyle nums on prose. Never pair a second display face into UI chrome.
 
 ## Elevation & panels
+
+Liquid Glass is system-owned platform chrome, never app-owned decoration. Allow UIKit to provide it for stack navigation and the tab bar. Do not recreate it with a custom glass view. The play dock, toasts, Scripture, canon rail, result references, progress panels, hint content, and achievement rows all remain square and unblurred.
 
 Secondary screens use **square panels** (`border-radius: 0`):
 
@@ -216,7 +224,7 @@ Lists inside panels: `--row-rule` between rows; do not also draw a full panel bo
 
 ### Play
 
-- **Primary / secondary buttons**: terracotta solid vs transparent hairline (`--border-strong`); **square corners** everywhere (same panel language as home Daily · Practice); 44px min height.
+- **Primary / secondary buttons and inputs**: terracotta solid vs transparent hairline (`--border-strong`); **square corners** everywhere, including the play dock; 44px min height.
 - **Ghost / nav**: tertiary ink icons (home, theme, crown).
 - **Verse**: type over soft gradient; no card.
 - **Canon timeline**: full-width canvas; genre segments; terracotta diamond marker; olive true on reveal; precision notch ruler; edge scrubbing; Genesis→Revelation bounds.

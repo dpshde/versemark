@@ -11,9 +11,9 @@ import {
   StyleSheet,
   Text,
   ToastAndroid,
-  View,
   useSafeAreaInsets,
 } from "../design-system";
+import { EditorialSurface } from "./EditorialSurface";
 import { spacing } from "../theme";
 import { useTheme } from "../theme-context";
 
@@ -108,9 +108,9 @@ export function AppToast({ message }: AppToastProps) {
         },
       ]}
     >
-      <View style={[styles.toast, { backgroundColor: colors.ink }]}>
+      <EditorialSurface style={[styles.toast, { backgroundColor: colors.ink, borderColor: colors.ink }]}>
         <Text style={[typography.body, styles.text, { color: colors.bg }]}>{visibleMessage}</Text>
-      </View>
+      </EditorialSurface>
     </Animated.View>
   );
 }
@@ -128,15 +128,8 @@ const styles = StyleSheet.create({
     minHeight: spacing.touch,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    borderRadius: 12,
-    borderCurve: "continuous",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    elevation: 4,
   },
   text: {
     fontSize: 14,

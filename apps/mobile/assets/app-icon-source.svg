@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Versemark app icon: the canonical timeline marker on the app background. -->
+  <rect width="1024" height="1024" fill="#fbfaf9" />
+  <path fill="#bd5932" d="M512 184 840 512 512 840 184 512 Z" />
+</svg>

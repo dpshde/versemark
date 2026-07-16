@@ -187,6 +187,13 @@ Current streaks are different: they may reset when a run breaks. Persist a last-
 
 The current physical storage key is `versemark:v3`. It was introduced so clients that only understand the older v2 shape cannot overwrite newer durable fields.
 
+The state also carries an embedded `schemaVersion`. Mobile stores the snapshot
+transactionally in SQLite and projects confirmed rounds into immutable
+`round_events` rows. Daily sessions, unlocks, settings, applied migrations, and
+an idempotent sync outbox have dedicated tables. The counters and rollups remain
+fast rebuildable views; new achievement rules should prefer immutable event
+fields when they need details such as translation, duration, or hint order.
+
 If a shipped client using the **current** key would parse and rewrite your new field away, bump the physical key (for example, v3 → v4):
 
 1. make the new key authoritative;

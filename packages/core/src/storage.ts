@@ -38,6 +38,20 @@ export const STORAGE_KEY_V2 = "versemark:v2";
 const KEY = STORAGE_KEY_V3;
 const LEGACY_KEY = STORAGE_KEY_V2;
 
+/** Embedded state schema. Migrations remain independent of physical KV keys. */
+export const STORAGE_SCHEMA_VERSION = 4;
+
+let idSequence = 0;
+
+/** Dependency-free, time-sortable local id suitable for idempotent sync upserts. */
+export function createRecordId(prefix: "device" | "round" | "reset", at: Date = new Date()): string {
+  idSequence = (idSequence + 1) % 1_679_616;
+  const time = Math.max(0, at.getTime()).toString(36).padStart(9, "0");
+  const random = Math.floor(Math.random() * 2_176_782_336).toString(36).padStart(6, "0");
+  const sequence = idSequence.toString(36).padStart(4, "0");
+  return `${prefix}_${time}${sequence}${random}`;
+}
+
 /**
  * Sliding window for daily history + practice log.
  * Cap is in *records* (daily entries / practice rounds), not verse-rounds:
@@ -60,6 +74,8 @@ export function getLogCap(): number {
 
 /** Unified scored-round shape (daily verse or practice). */
 export interface RoundRecord {
+  /** Stable immutable-event id. Present on all newly recorded rounds. */
+  eventId?: string;
   trueRef: string;
   /** Range start on the global verse axis. */
   trueVerseIndex: number;
@@ -72,7 +88,25 @@ export interface RoundRecord {
   hintStep: number;
   /** ISO timestamp. */
   at: string;
+  /** Explicit sync/event timestamp; mirrors `at` for compatibility. */
+  occurredAt?: string;
   source: "daily" | "practice";
+  /** Stable installation owner; userId remains nullable until accounts exist. */
+  deviceId?: string;
+  userId?: string | null;
+  /** Immutable events start at revision 1. */
+  revision?: number;
+  appVersion?: string;
+  rulesVersion?: string;
+  contentVersion?: string;
+  translation?: "kjv" | "bsb";
+  durationMs?: number;
+  hintEvents?: HintEvent[];
+}
+
+export interface HintEvent {
+  step: number;
+  occurredAt: string;
 }
 
 /** @deprecated Prefer RoundRecord — kept as alias for daily resume fields. */
@@ -158,6 +192,11 @@ export interface LifetimeCounters {
 }
 
 export interface AppState {
+  schemaVersion: number;
+  /** Monotonic local snapshot revision; event rows retain independent revisions. */
+  revision: number;
+  /** Anonymous installation id, ready to be associated with a future account. */
+  deviceId: string;
   lastDaily: DailyResultRecord | null;
   history: DailyResultRecord[];
   streak: number;
@@ -220,6 +259,9 @@ export const emptyLifetime = (): LifetimeCounters => ({
 
 /** Empty persisted state — shared by load fallbacks and tests. */
 export const emptyAppState = (): AppState => ({
+  schemaVersion: STORAGE_SCHEMA_VERSION,
+  revision: 0,
+  deviceId: createRecordId("device"),
   lastDaily: null,
   history: [],
   streak: 0,
@@ -266,7 +308,24 @@ export function normalizeRoundRecord(
   if (raw.trueVerseIndex == null && raw.guessVerseIndex == null) return null;
   const trueVerseIndex = Number(raw.trueVerseIndex) || 0;
   const rangeEnd = Number(raw.trueRangeEndVerseIndex);
+  const occurredAt =
+    typeof raw.occurredAt === "string" && raw.occurredAt !== ""
+      ? raw.occurredAt
+      : typeof raw.at === "string" && raw.at !== ""
+        ? raw.at
+        : new Date(0).toISOString();
+  const legacySeed = [
+    raw.source ?? fallbackSource,
+    raw.trueRef ?? "",
+    trueVerseIndex,
+    Number(raw.guessVerseIndex) || 0,
+    occurredAt,
+  ].join(":");
   return {
+    eventId:
+      typeof raw.eventId === "string" && raw.eventId !== ""
+        ? raw.eventId
+        : `round_legacy_${stableStringHash(legacySeed)}`,
     trueRef: typeof raw.trueRef === "string" ? raw.trueRef : "",
     trueVerseIndex,
     trueRangeEndVerseIndex:
@@ -277,15 +336,38 @@ export function normalizeRoundRecord(
     distance: Number(raw.distance) || 0,
     total: Number(raw.total) || 0,
     hintStep: Number(raw.hintStep) || 1,
-    at:
-      typeof raw.at === "string" && raw.at !== ""
-        ? raw.at
-        : new Date(0).toISOString(),
+    at: occurredAt,
+    occurredAt,
     source:
       raw.source === "practice" || raw.source === "daily"
         ? raw.source
         : fallbackSource,
+    deviceId: typeof raw.deviceId === "string" && raw.deviceId !== "" ? raw.deviceId : undefined,
+    userId: typeof raw.userId === "string" && raw.userId !== "" ? raw.userId : null,
+    revision: Math.max(1, Number(raw.revision) || 1),
+    appVersion: typeof raw.appVersion === "string" ? raw.appVersion : "legacy",
+    rulesVersion: typeof raw.rulesVersion === "string" ? raw.rulesVersion : "legacy",
+    contentVersion: typeof raw.contentVersion === "string" ? raw.contentVersion : "legacy",
+    translation: raw.translation === "kjv" || raw.translation === "bsb" ? raw.translation : undefined,
+    durationMs: Number.isFinite(Number(raw.durationMs)) ? Math.max(0, Number(raw.durationMs)) : undefined,
+    hintEvents: Array.isArray(raw.hintEvents)
+      ? raw.hintEvents.flatMap((event) => {
+          if (!event || typeof event !== "object") return [];
+          const item = event as Partial<HintEvent>;
+          if (!Number.isFinite(Number(item.step)) || typeof item.occurredAt !== "string") return [];
+          return [{ step: Math.max(1, Number(item.step)), occurredAt: item.occurredAt }];
+        })
+      : [],
   };
+}
+
+function stableStringHash(value: string): string {
+  let hash = 2_166_136_261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return (hash >>> 0).toString(36);
 }
 
 function normalizeRecord(
@@ -490,6 +572,12 @@ function parseStoredState(parsed: Partial<AppState>): AppState {
       .at(-1) ??
     null;
   return {
+    schemaVersion: STORAGE_SCHEMA_VERSION,
+    revision: Math.max(0, Number(parsed.revision) || 0),
+    deviceId:
+      typeof parsed.deviceId === "string" && parsed.deviceId !== ""
+        ? parsed.deviceId
+        : createRecordId("device"),
     lastDaily: normalizeRecord(parsed.lastDaily),
     history,
     streak: Number(parsed.streak) || 0,
@@ -533,9 +621,10 @@ export function loadState(): AppState {
   try {
     const rawV3 = readRaw(KEY);
     if (rawV3) {
-      const state = parseStoredState(JSON.parse(rawV3) as Partial<AppState>);
-      if (needsCoverageMigration(state)) {
-        const migrated = reconcileCoverageFromLogs(state);
+      const parsed = JSON.parse(rawV3) as Partial<AppState>;
+      const state = parseStoredState(parsed);
+      if (Number(parsed.schemaVersion) !== STORAGE_SCHEMA_VERSION || needsCoverageMigration(state)) {
+        const migrated = needsCoverageMigration(state) ? reconcileCoverageFromLogs(state) : state;
         // Best-effort persist of coverage import; never throw from load.
         saveState(migrated);
         return migrated;
@@ -551,7 +640,11 @@ export function loadState(): AppState {
       return migrated;
     }
 
-    return defaultState();
+    // Persist the installation id on first launch. Without this write, every
+    // later load before the first scored round would mint a different device.
+    const initial = defaultState();
+    saveState(initial);
+    return initial;
   } catch {
     return defaultState();
   }
@@ -563,11 +656,29 @@ export function loadState(): AppState {
  */
 export function saveState(state: AppState): boolean {
   try {
+    state.schemaVersion = STORAGE_SCHEMA_VERSION;
+    state.revision = Math.max(0, Number(state.revision) || 0) + 1;
     getStorageBackend().setItem(KEY, JSON.stringify(state));
     return true;
   } catch {
     return false;
   }
+}
+
+/**
+ * Delete gameplay, achievements, and history while retaining this install's
+ * anonymous device identity and unrelated preferences such as translation.
+ */
+export function resetProgress(): AppState {
+  const backend = getStorageBackend();
+  const current = loadState();
+  backend.removeItem?.(KEY);
+  backend.removeItem?.(LEGACY_KEY);
+  const next = emptyAppState();
+  next.deviceId = current.deviceId || next.deviceId;
+  next.revision = current.revision;
+  saveState(next);
+  return next;
 }
 
 function dateKeyFromParts(y: number, m: number, d: number): string {

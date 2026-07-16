@@ -100,11 +100,14 @@ export const spacing = {
   touch: 44,
 } as const;
 
-/** Design system: square corners everywhere. */
+/**
+ * Geometry follows material role, not component whim:
+ * every app-owned surface is square; system-owned native chrome keeps its
+ * platform geometry without Versemark imitating it.
+ */
 export const radius = {
-  panel: 0,
-  btn: 0,
-  dropcap: 4,
+  editorial: 0,
+  artwork: 4,
   pill: 999,
 } as const;
 

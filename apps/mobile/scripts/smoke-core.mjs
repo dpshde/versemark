@@ -58,19 +58,30 @@ for (const name of [
   "takeHint",
   "shareForRound",
   "TimelineStrip",
-  "hapticConfirm",
   "hapticResult",
+  "hapticWarning",
   "shareText",
 ]) {
   if (!playSrc.includes(name)) fail(`PlayScreen must use ${name}`);
+}
+
+const timelineSrc = readFileSync(
+  path.join(mobileRoot, "src/components/TimelineStrip.tsx"),
+  "utf8"
+);
+if (!timelineSrc.includes("hapticConfirm")) {
+  fail("TimelineStrip must confirm a committed marker placement");
 }
 
 const storageSrc = readFileSync(
   path.join(mobileRoot, "src/lib/storage-native.ts"),
   "utf8"
 );
-if (!storageSrc.includes("AsyncStorage") && !storageSrc.includes("async-storage")) {
-  fail("storage-native must use AsyncStorage");
+if (!storageSrc.includes('import("expo-sqlite")')) {
+  fail("storage-native must use expo-sqlite as its authoritative store");
+}
+if (!storageSrc.includes("migrateLegacyAsyncStorage")) {
+  fail("storage-native must preserve the one-time AsyncStorage migration");
 }
 if (!storageSrc.includes("setStorageBackend")) {
   fail("storage-native must call setStorageBackend");
@@ -90,6 +101,7 @@ const pkg = JSON.parse(
 const deps = { ...pkg.dependencies, ...pkg.devDependencies };
 for (const dep of [
   "expo-haptics",
+  "expo-sqlite",
   "@react-native-async-storage/async-storage",
   "@versemark/core",
 ]) {
@@ -113,5 +125,5 @@ if (r.status !== 0) {
 }
 
 console.log(
-  "OK: mobile play surfaces + AsyncStorage + haptics + @versemark/core wiring"
+  "OK: mobile play surfaces + SQLite durability + haptics + @versemark/core wiring"
 );

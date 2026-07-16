@@ -8,6 +8,7 @@ import {
   getDailyForPuzzle,
   isDailyComplete,
   loadState,
+  resetProgress,
   saveState,
   recordDailyResult,
   recordDailyScoredRound,
@@ -18,6 +19,8 @@ import {
   reconcileCoverageFromLogs,
   emptyAppState,
   emptyLifetime,
+  normalizeRoundRecord,
+  STORAGE_SCHEMA_VERSION,
   monthKeyFromAt,
   setLogCapForTests,
   setStorageBackend,
@@ -238,6 +241,42 @@ describe("daily progress storage", () => {
     // Imported into v3; materializes points floor
     expect(mem.has(KEY_V3)).toBe(true);
     expect(state.lifetime.totalPoints).toBeGreaterThanOrEqual(3000);
+    expect(state.schemaVersion).toBe(STORAGE_SCHEMA_VERSION);
+    expect(state.deviceId).toMatch(/^device_/);
+    expect(state.revision).toBeGreaterThan(0);
+    expect(JSON.parse(mem.get(KEY_V3)!).schemaVersion).toBe(STORAGE_SCHEMA_VERSION);
+  });
+
+  it("persists a stable installation id on first load", () => {
+    const first = loadState();
+    const second = loadState();
+    expect(first.deviceId).toBe(second.deviceId);
+    expect(mem.has(KEY_V3)).toBe(true);
+  });
+
+  it("resets progress while preserving the installation identity", () => {
+    const state = loadState();
+    state.practiceRounds = 4;
+    state.streak = 3;
+    state.achievementUnlocks.example = { unlockedAt: "2026-08-15T12:00:00.000Z" };
+    saveState(state);
+
+    const reset = resetProgress();
+    expect(reset.deviceId).toBe(state.deviceId);
+    expect(reset.practiceRounds).toBe(0);
+    expect(reset.streak).toBe(0);
+    expect(reset.achievementUnlocks).toEqual({});
+    expect(reset.history).toEqual([]);
+    expect(mem.has(KEY_V2)).toBe(false);
+  });
+
+  it("gives legacy rounds deterministic immutable event ids", () => {
+    const legacy = practiceRound(42, "2026-08-15T12:00:00.000Z");
+    const first = normalizeRoundRecord(legacy, "practice");
+    const second = normalizeRoundRecord(legacy, "practice");
+    expect(first?.eventId).toMatch(/^round_legacy_/);
+    expect(first?.eventId).toBe(second?.eventId);
+    expect(first?.revision).toBe(1);
   });
 });
 

@@ -9,6 +9,7 @@ import {
   startEndlessRound,
   loadState,
   markAchievementsSeen,
+  resetProgress,
   emptyAppState,
   loadTranslation,
   saveTranslation,
@@ -109,6 +110,13 @@ function AppShell() {
     setAppState(loadState());
   }, []);
 
+  const resetAllProgress = useCallback(() => {
+    const next = resetProgress();
+    setRound(null);
+    setUnlockNotice(null);
+    setAppState(next);
+  }, []);
+
   const continueEndless = useCallback(() => {
     const r = startEndlessRound(pool, texts);
     setRound(r);
@@ -173,6 +181,7 @@ function AppShell() {
         onStartDaily={startDaily}
         onStartEndless={startEndless}
         onProgressFocus={openProgress}
+        onResetProgress={resetAllProgress}
         onExitRound={exitRound}
         onTranslation={changeTranslation}
         onRoundChange={setRound}

@@ -68,21 +68,38 @@ describe("full round flow", () => {
     expect(round.hintStep).toBe(1);
     expect(isUsefulParagraph(round.paragraph, item.verse)).toBe(true);
 
-    round = takeHint(round);
+    round = takeHint(round, new Date("2026-08-15T12:00:01.000Z"));
     expect(round.hintStep).toBe(2);
     expect(canTakeHint(round)).toBe(true);
-    round = takeHint(round);
+    round = takeHint(round, new Date("2026-08-15T12:00:02.000Z"));
     expect(round.hintStep).toBe(3);
     expect(canTakeHint(round)).toBe(false);
 
     const guess = item.verseIndex + 1000; // half-life offset in verses
-    const { round: done } = confirmGuess(round, guess, fixed);
+    expect(round.hintEvents.map((event) => event.step)).toEqual([2, 3]);
+    const { round: done, appState } = confirmGuess(round, guess, fixed, {
+      deviceId: "device_test",
+      appVersion: "0.1.0",
+      rulesVersion: "1",
+      contentVersion: "test-content",
+      translation: "bsb",
+    });
     expect(done.phase).toBe("revealed");
     expect(done.result).not.toBeNull();
     const expected = scoreRound(guess, item.verseIndex, 3);
     expect(done.result!.total).toBe(expected.total);
     expect(done.result!.distance).toBe(1000);
     expect(done.result!.distancePts).toBe(500);
+    const event = appState!.lastDaily!.rounds[0];
+    expect(event.eventId).toMatch(/^round_/);
+    expect(event.occurredAt).toBe(fixed.toISOString());
+    expect(event.deviceId).toBe("device_test");
+    expect(event.appVersion).toBe("0.1.0");
+    expect(event.rulesVersion).toBe("1");
+    expect(event.contentVersion).toBe("test-content");
+    expect(event.translation).toBe("bsb");
+    expect(event.revision).toBe(1);
+    expect(event.hintEvents?.map((hint) => hint.step)).toEqual([2, 3]);
 
     let final = done;
     for (let index = 1; index < 3; index += 1) {
