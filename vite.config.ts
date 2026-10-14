@@ -35,7 +35,7 @@ export default defineConfig({
         ],
         navigateFallback: "index.html",
         // Share links + OG cards are Worker routes, never the app shell.
-        navigateFallbackDenylist: [/^\/d\//, /^\/api\//, /^\/g(\/|$)/],
+        navigateFallbackDenylist: [/^\/d\//, /^\/api\//, /^\/g([/?]|$)/, /^\/i([/?]|$)/],
         cleanupOutdatedCaches: true,
         clientsClaim: true,
       },

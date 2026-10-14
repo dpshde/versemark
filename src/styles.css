@@ -2050,7 +2050,8 @@ button:disabled {
 .unlock-toast {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--space-xl) + env(safe-area-inset-bottom));
+  /* Top of screen: never covers result actions (Share / Next) in the dock. */
+  top: calc(var(--space-md) + env(safe-area-inset-top));
   transform: translateX(-50%);
   z-index: 20;
   max-width: min(22rem, calc(100vw - 2rem));
@@ -2721,3 +2722,51 @@ button:disabled {
     transition: none !important;
   }
 }
+
+/* —— Insights: your Bible map —— */
+.bible-map { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+.bible-map-rail { display: flex; height: 22px; width: 100%; gap: 1px; background: var(--surface); }
+.bible-map-book { display: block; min-width: 1px; flex-basis: 0; }
+.bible-map-ends { display: flex; justify-content: space-between; font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3, var(--ink-2)); }
+.bible-map-key { display: flex; align-items: center; gap: 4px; font-size: 0.7rem; color: var(--ink-2); margin-top: 2px; }
+.bible-map-key i { display: inline-block; width: 12px; height: 8px; }
+.bible-map-key i.untested { margin-left: var(--space-sm); }
+.insight-headline { margin: 2px 0 var(--space-sm); font-size: 1.02rem; line-height: 1.4; color: var(--ink); }
+.insight-lead .btn-secondary { margin-top: var(--space-md); }
+.insight-sections { list-style: none; margin: var(--space-xs) 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.insight-sections li { display: grid; grid-template-columns: 7.2rem 1fr 4.6rem; align-items: center; gap: var(--space-sm); font-size: 0.86rem; }
+.insight-sec-val { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.insight-bar { display: block; height: 8px; background: var(--rail); width: 100%; }
+.insight-bar i { display: block; height: 100%; background: var(--accent); }
+.insight-note { margin: var(--space-sm) 0 0; font-size: 0.86rem; color: var(--ink-2); line-height: 1.45; }
+.insight-cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); }
+.insight-cols h3 { margin: var(--space-xs) 0; font-size: 0.8rem; font-weight: 600; color: var(--ink-2); }
+.insight-cols p { margin: 2px 0; font-size: 0.9rem; }
+.insight-study { display: flex; flex-direction: column; padding: var(--space-sm) 0; border-bottom: 1px solid var(--row-rule); color: var(--ink); text-decoration: none; }
+.insight-study strong { font-size: 0.98rem; }
+.insight-study span { font-size: 0.82rem; color: var(--ink-2); }
+.insight-study strong::after { content: " ↗"; color: var(--accent); }
+.insight-milestone { padding: var(--space-sm) 0; border-bottom: 1px solid var(--row-rule); display: flex; flex-direction: column; gap: 4px; }
+.insight-milestone p { margin: 0; font-size: 0.82rem; color: var(--ink-2); }
+.insight-ms-head { display: flex; justify-content: space-between; font-size: 0.95rem; }
+.insight-ms-head span { font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: 0.82rem; }
+.insight-milestone:not(.unlocked) .insight-bar i { background: var(--ink-2); opacity: 0.45; }
+.insight-milestone.unlocked .insight-ms-head strong::before { content: "◆ "; color: var(--accent); }
+.btn-link { align-self: flex-start; background: none; border: 0; padding: 2px 0; font: inherit; font-size: 0.82rem; color: var(--accent-deep); text-decoration: underline; cursor: pointer; }
+.home-insight { display: flex; flex-direction: column; gap: 6px; width: 100%; margin: var(--space-md) 0 0; padding: var(--space-sm) var(--space-md) var(--space-md); border: 1px solid var(--border-strong); background: var(--surface); text-align: left; font: inherit; color: var(--ink); cursor: pointer; }
+.home-insight-label { font-size: 0.72rem; font-weight: 600; font-variant-caps: all-small-caps; letter-spacing: 0.06em; color: var(--ink-2); }
+.home-insight-text { font-size: 0.92rem; line-height: 1.4; }
+.home-insight-cta { font-size: 0.82rem; color: var(--accent-deep); font-weight: 600; }
+.home-insight .bible-map-key { display: none; }
+.home-insight--empty { border-style: dashed; text-align: center; align-items: center; }
+.home-insight--empty .home-insight-text { color: var(--ink-2); }
+.unlock-toast { display: flex; align-items: center; gap: 6px; font: inherit; color: var(--ink); cursor: pointer; pointer-events: auto; }
+.unlock-toast-mark { color: var(--accent); font-size: 0.75rem; }
+.unlock-toast--inline { position: static; transform: none; margin: 0 auto var(--space-sm); max-width: 100%; box-shadow: none; animation: fadeIn var(--dur-mid) var(--ease-out) both; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.insight-lead .btn-primary { margin-top: var(--space-md); width: 100%; }
+.compare-maps .compare-you { margin-top: var(--space-md); }
+.compare-sections li { grid-template-columns: 1fr 4rem 4rem; }
+.compare-sections li.ahead .compare-yours { color: var(--success); font-weight: 600; }
+.compare-sections li.behind .compare-yours { color: var(--accent-deep); }
+.compare-cta { flex-direction: column; gap: var(--space-sm); margin-top: var(--space-sm); }
