@@ -47,3 +47,15 @@ describe("insights", () => {
     expect(mp.unlocked).toBe(true);
   });
 });
+
+import { gapPool } from "../src/lib/insights";
+describe("gap practice pool", () => {
+  it("draws from weak/untested books, falls back when thin", () => {
+    const ins = computeInsights([round("JHN", 3, "JHN", 3), round("JHN", 4, "JHN", 4)]);
+    const pool = [verseIndexFor("JHN", 1, 1)!, verseIndexFor("ISA", 1, 1)!, verseIndexFor("GEN", 1, 1)!].map((v) => ({ verseIndex: v }));
+    const g = gapPool(pool, ins, 1);
+    expect(g.items.map((x) => x.verseIndex)).not.toContain(verseIndexFor("JHN", 1, 1));
+    expect([...g.books].sort()).toEqual(["Genesis", "Isaiah"]);
+    expect(gapPool(pool, ins, 99).items).toHaveLength(3);
+  });
+});

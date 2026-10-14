@@ -79,7 +79,7 @@ const MILESTONES: Record<string, string> = {
   "near-streak-5": "Steady hand ×5", "near-streak-10": "Sure-footed ×10", "near-streak-25": "Sure-footed ×25",
 };
 /** Strength 0..4 → hex (olive strong … terracotta gap), matching the in-app heat scale. */
-const LEVEL = ["#c0654a", "#cc8a5f", "#c9ab79", "#a9b97f", "#7fae76"];
+const LEVEL = ["#c19375", "#ae8e5e", "#968a4f", "#79864a", "#57814e"]; // muted clay (gap) → olive (strong)
 export interface MapShare { map: string; sections: Array<number | null>; rounds: number; milestone?: { id: string; title: string; done: number; total: number } }
 
 export function parseMapShare(q: URLSearchParams): MapShare {
@@ -137,5 +137,5 @@ export function mapHtml(origin: string, search: string, m: MapShare): string {
 <meta property="og:image" content="${esc(img)}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${esc(title)}"><meta name="twitter:image" content="${esc(img)}">
 <style>body{background:#faf8f4;color:#1c1916;font-family:Georgia,serif;text-align:center;padding-top:30vh}</style></head>
-<body><p>Opening Versemark…</p><script>location.replace("/?from=map")</script></body></html>`;
+<body><p>Opening Versemark…</p><script>location.replace(${JSON.stringify(`/?compare=${m.map}&cs=${m.sections.map((x) => (x == null ? "-" : x)).join(".")}&cn=${m.rounds}`)})</script></body></html>`;
 }

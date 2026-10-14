@@ -20,7 +20,7 @@ import { CanonStrip } from "./lib/strip";
 import { formatVerseLabel, BOOKS } from "./lib/books";
 import { bookSegments, bookSegmentAtT, testamentSeamT, type ZoomPreset } from "./lib/axis";
 import { shareText } from "./lib/share";
-import { computeInsights, computeMilestones, bookLevel, formatAccuracy, type Insights, type Milestone } from "./lib/insights";
+import { computeInsights, computeMilestones, bookLevel, formatAccuracy, gapPool, type Insights, type Milestone } from "./lib/insights";
 import { mapShareText, milestoneShareText } from "./lib/insights-share";
 import { postDailyToGroup } from "./lib/group";
 import {
@@ -84,6 +84,8 @@ import {
 const app = document.querySelector<HTMLDivElement>("#app")!;
 
 let pool: PoolItem[] = [];
+/** "Practice my gaps": endless rounds drawn from weak/untested books (still counts as practice). */
+let gapFocus = false;
 /** BSB + KJV text bundles for the curated pool. */
 let textsByTranslation: Record<TranslationId, TextBundle> = {
   kjv: { verses: {}, paragraphs: {} },
@@ -359,21 +361,34 @@ function showUnlockToast(ids: string[]): void {
   const first = achievementDefForId(ids[0] ?? "");
   const more = ids.length > 1 ? ` · +${ids.length - 1} more` : "";
   const title = first?.title ?? "Achievement";
-  const existing = document.querySelector(".unlock-toast");
-  existing?.remove();
-  const toast = el("div", {
+  dismissToast();
+  const toast = el("button", {
     class: "unlock-toast",
+    type: "button",
     role: "status",
     "aria-live": "polite",
+    title: "View achievements",
   });
   toast.append(
-    el("p", {
-      class: "unlock-toast-title",
-      text: `Unlocked · ${title}${more}`,
-    })
+    el("span", { class: "unlock-toast-mark", text: "◆", "aria-hidden": "true" }),
+    el("span", { class: "unlock-toast-title", text: `${title}${more}` })
   );
-  document.body.append(toast);
-  window.setTimeout(() => toast.remove(), 3200);
+  toast.addEventListener("click", () => { dismissToast(); renderAchievements(); });
+  // Inline in the result area (above Share/Next) so it never covers the verse or actions.
+  const dock = document.querySelector(".result-actions");
+  if (dock?.parentElement) {
+    toast.classList.add("unlock-toast--inline");
+    dock.parentElement.insertBefore(toast, dock);
+  } else {
+    document.body.append(toast);
+  }
+  toastTimer = window.setTimeout(dismissToast, 4000);
+}
+
+let toastTimer: number | undefined;
+function dismissToast(): void {
+  window.clearTimeout(toastTimer);
+  document.querySelectorAll(".unlock-toast").forEach((t) => t.remove());
 }
 
 /** Books that can actually appear (pool coverage) — milestones only ask for these. */
@@ -397,9 +412,11 @@ function levelColor(level: number | null): string {
   if (level == null) return "var(--rail)";
   const t = 1 - level / 4;
   const dark = resolvedTheme() === "dark";
-  const L = dark ? 0.38 + t * 0.28 : 0.84 - t * 0.36;
-  const C = dark ? 0.06 + t * 0.1 : 0.055 + t * 0.12;
-  return `oklch(${L.toFixed(3)} ${C.toFixed(3)} ${(145 - t * 105).toFixed(1)})`;
+  // Muted: gaps read as warm clay, not alarm red. Lightness carries the contrast.
+  // Strong = deeper olive; gaps = lighter, desaturated clay (≥2.2:1 vs untested rail).
+  const L = dark ? 0.7 - t * 0.2 : 0.56 + t * 0.14;
+  const C = dark ? 0.09 - t * 0.03 : 0.09 - t * 0.02;
+  return `oklch(${L.toFixed(3)} ${C.toFixed(3)} ${(140 - t * 85).toFixed(1)})`;
 }
 
 function shareButton(label: string, text: () => string, cls = "btn-secondary"): HTMLButtonElement {
@@ -417,13 +434,17 @@ function shareButton(label: string, text: () => string, cls = "btn-secondary"): 
 }
 
 function makeBibleMap(ins: Insights): HTMLElement {
-  const wrap = el("div", { class: "bible-map", role: "img", "aria-label": "Your Bible map: strength by book" });
+  return makeLevelMap(ins.books.map((b) => bookLevel(b)), ins.books.map((b) => b.rounds ? `${formatAccuracy(b.accuracy)} within a chapter (${b.rounds})` : "not tested"));
+}
+
+function makeLevelMap(levels: Array<number | null>, notes?: string[], label = "Bible map: strength by book"): HTMLElement {
+  const wrap = el("div", { class: "bible-map", role: "img", "aria-label": label });
   const rail = el("div", { class: "bible-map-rail" });
-  ins.books.forEach((b, i) => {
-    const meta = BOOKS[i];
-    const seg = el("span", { class: "bible-map-book", title: `${meta.name}: ${b.rounds ? `${formatAccuracy(b.accuracy)} within a chapter (${b.rounds})` : "not tested"}` });
+  BOOKS.forEach((meta, i) => {
+    const lv = levels[i] ?? null;
+    const seg = el("span", { class: "bible-map-book", title: `${meta.name}: ${notes?.[i] ?? (lv == null ? "not tested" : `level ${lv}/4`)}` });
     seg.style.flexGrow = String(meta.verses);
-    seg.style.background = levelColor(bookLevel(b));
+    seg.style.background = levelColor(lv);
     rail.append(seg);
   });
   wrap.append(
@@ -438,6 +459,71 @@ function makeBibleMap(ins: Insights): HTMLElement {
     ])
   );
   return wrap;
+}
+
+/** Parse a shared map (/i link → app ?compare=…). */
+function parseSharedMap(params: URLSearchParams): { levels: Array<number | null>; sections: Array<number | null>; rounds: number } | null {
+  const m = params.get("compare");
+  if (!m || !/^[0-4-]{66}$/.test(m)) return null;
+  const sections = (params.get("cs") ?? "").split(".").slice(0, 6).map((x) => { const n = Number.parseInt(x, 10); return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : null; });
+  while (sections.length < 6) sections.push(null);
+  return { levels: [...m].map((c) => (c === "-" ? null : Number(c))), sections, rounds: Math.max(0, Number.parseInt(params.get("cn") ?? "0", 10) || 0) };
+}
+
+function renderCompare(shared: NonNullable<ReturnType<typeof parseSharedMap>>): void {
+  const { ins } = currentInsights();
+  app.innerHTML = "";
+  const screen = el("div", { class: "screen achievements insights active", id: "screen-compare" });
+  const back = el("button", { class: "btn-ghost", type: "button", "aria-label": "Home", title: "Home" });
+  back.innerHTML = `<svg class="home-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M3.75 10.5 12 3.75l8.25 6.75" />
+    <path d="M5.75 9.25v10h12.5v-10M9.5 19.25v-5.5h5v5.5" />
+  </svg>`;
+  back.addEventListener("click", () => { hapticLight(); history.replaceState(null, "", "/"); renderHome(); });
+  const topActions = el("div", { class: "chrome-top-actions" });
+  topActions.append(makeThemeToggle(), back);
+  const top = el("div", { class: "achievements-top" });
+  top.append(el("div", { class: "achievements-top-spacer" }), el("h1", { class: "achievements-heading", text: "Compare Bible maps" }), el("div", { class: "achievements-top-spacer" }));
+  screen.append(topActions, top);
+  const body = el("div", { class: "achievements-body" });
+  const mine = ins.rounds >= 3;
+  const maps = el("div", { class: "achievements-summary compare-maps" }, [
+    el("h2", { class: "achievements-section-label", text: `Their map · ${shared.rounds} verses` }),
+    makeLevelMap(shared.levels, undefined, "Shared Bible map"),
+    el("h2", { class: "achievements-section-label compare-you", text: mine ? `Your map · ${ins.rounds} verses` : "Your map" }),
+    mine ? makeBibleMap(ins) : el("p", { class: "insight-note", text: "You haven't placed enough verses yet. Play a few rounds to see how you compare." }),
+  ]);
+  body.append(maps);
+  const table = el("div", { class: "achievements-summary" }, [el("h2", { class: "achievements-section-label", text: "Within one chapter · them vs you" })]);
+  const list = el("ul", { class: "insight-sections compare-sections" });
+  ins.sections.forEach((s, i) => {
+    const theirs = shared.sections[i];
+    const yours = mine && s.accuracy != null ? Math.round(s.accuracy * 100) : null;
+    const cmp = theirs != null && yours != null ? (yours > theirs ? "ahead" : yours < theirs ? "behind" : "") : "";
+    list.append(el("li", { class: cmp }, [
+      el("span", { class: "insight-sec-label", text: s.label }),
+      el("span", { class: "insight-sec-val", text: theirs == null ? "—" : `${theirs}%` }),
+      el("span", { class: "insight-sec-val compare-yours", text: yours == null ? "—" : `${yours}%` }),
+    ]));
+  });
+  table.append(list);
+  body.append(table);
+  const cta = el("div", { class: "btn-row compare-cta" });
+  const daily = el("button", { class: "btn-primary", type: "button", text: mine ? "Play today's daily" : "Play today's daily — start your map" });
+  daily.addEventListener("click", () => { history.replaceState(null, "", "/"); gapFocus = false; startMode("daily"); });
+  cta.append(daily);
+  if (mine) {
+    const gaps = el("button", { class: "btn-secondary", type: "button", text: "Practice my gaps" });
+    gaps.addEventListener("click", () => { history.replaceState(null, "", "/"); startGaps(); });
+    cta.append(gaps);
+  } else {
+    const prac = el("button", { class: "btn-secondary", type: "button", text: "Practice" });
+    prac.addEventListener("click", () => { history.replaceState(null, "", "/"); gapFocus = false; startMode("endless"); });
+    cta.append(prac);
+  }
+  body.append(cta);
+  screen.append(body);
+  app.append(screen);
 }
 
 function renderInsights(): void {
@@ -466,7 +552,14 @@ function renderInsights(): void {
     el("p", { class: "insight-headline", text: ins.headline }),
     makeBibleMap(ins),
   ]);
-  if (ins.rounds >= 3) lead.append(shareButton("Share my map", () => mapShareText(ins)));
+  if (ins.rounds >= 3) {
+    const gaps = el("button", { class: "btn-primary", type: "button", id: "btn-gaps", text: "Practice my gaps" });
+    gaps.addEventListener("click", () => { hapticLight(); startGaps(); });
+    const g = gapPool(pool, ins);
+    lead.append(gaps);
+    if (g.books.length) lead.append(el("p", { class: "insight-note", text: `Verses from your weak and untested books: ${g.books.slice(0, 4).join(", ")}${g.books.length > 4 ? ` +${g.books.length - 4} more` : ""}.` }));
+    lead.append(shareButton("Share my map", () => mapShareText(ins)));
+  }
   body.append(lead);
 
   if (ins.rounds > 0) {
@@ -1443,6 +1536,8 @@ function makeWordmark(): HTMLHeadingElement {
 }
 
 function renderHome(): void {
+  gapFocus = false;
+  dismissToast();
   app.innerHTML = "";
   const state = currentAppState();
   const screen = el("div", { class: "screen home active", id: "screen-home" });
@@ -1534,6 +1629,7 @@ function renderHome(): void {
 </svg><span>Daily</span>`;
         b.addEventListener("click", () => {
           hapticLight();
+          gapFocus = false;
           startMode("daily");
         });
         return b;
@@ -1547,6 +1643,7 @@ function renderHome(): void {
         });
         b.addEventListener("click", () => {
           hapticLight();
+          gapFocus = false;
           startMode("endless");
         });
         return b;
@@ -1574,7 +1671,13 @@ function renderHome(): void {
   scheduleAchievementDropCapPreload(state);
 }
 
+function startGaps(): void {
+  gapFocus = true;
+  startMode("endless");
+}
+
 function startMode(mode: "daily" | "endless", puzzleNumber?: number): void {
+  dismissToast();
   if (mode === "daily" && puzzleNumber == null) scoreToBeat = null;
   chromeRo?.disconnect();
   chromeRo = null;
@@ -1588,7 +1691,7 @@ function startMode(mode: "daily" | "endless", puzzleNumber?: number): void {
       ? puzzleNumber == null
         ? startDailyRound(pool, texts)
         : startDailyRoundForPuzzle(pool, texts, puzzleNumber)
-      : startEndlessRound(pool, texts);
+      : startEndlessRound(gapFocus ? gapPool(pool, currentInsights().ins).items : pool, texts);
   provisionalGuess = round.guessVerseIndex;
   renderPlay();
   requestAnimationFrame(() => {
@@ -1727,11 +1830,11 @@ function renderPlay(): void {
   const modeLabel =
     round.mode === "daily"
       ? `${scoreToBeat != null ? `Beat ${scoreToBeat} · ` : ""}${dailyPosition ?? "Daily"}`
-      : "Practice";
+      : gapFocus ? "Gaps practice" : "Practice";
   const modeAria =
     round.mode === "daily" && round.puzzleNumber != null
       ? `Daily ${round.puzzleNumber}${round.daily ? `, verse ${round.daily.index + 1} of ${round.daily.items.length}` : ""}${scoreToBeat != null ? `, score to beat ${scoreToBeat}` : ""}`
-      : "Practice";
+      : gapFocus ? "Practice — your gap books" : "Practice";
   const mode = el("span", {
     class: "mode-label",
     text: modeLabel,
@@ -2968,7 +3071,10 @@ async function main(): Promise<void> {
   const sharedDaily = Number(params.get("daily"));
   const sharedBeat = Number(params.get("beat"));
   scoreToBeat = Number.isFinite(sharedBeat) && sharedBeat > 0 ? sharedBeat : null;
-  if (Number.isInteger(sharedDaily) && sharedDaily !== 0) {
+  const sharedMap = parseSharedMap(params);
+  if (sharedMap) {
+    renderCompare(sharedMap);
+  } else if (Number.isInteger(sharedDaily) && sharedDaily !== 0) {
     startMode("daily", sharedDaily);
   } else {
     renderHome();

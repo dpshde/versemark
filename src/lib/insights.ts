@@ -212,3 +212,20 @@ export function computeMilestones(rounds: RoundRecord[], poolBooks?: Set<number>
     streak(5), streak(10), streak(25),
   ];
 }
+
+/**
+ * "Practice my gaps": pool items from weak (< 50% within a chapter) or untested books.
+ * Falls back to the full pool when the gap set is too thin to feel random.
+ */
+export function gapPool<T extends { verseIndex: number }>(pool: T[], ins: Insights, minItems = 20): { items: T[]; books: string[] } {
+  const gapIdx = new Set<number>();
+  ins.books.forEach((b, i) => {
+    if (b.rounds === 0 || (b.accuracy ?? 0) < 0.5) gapIdx.add(i);
+  });
+  const items = pool.filter((it) => {
+    const loc = bookChapterVerseFromIndex(it.verseIndex);
+    return loc != null && gapIdx.has(loc.book.index);
+  });
+  const books = [...new Set(items.map((it) => bookChapterVerseFromIndex(it.verseIndex)!.book.name))];
+  return items.length >= minItems ? { items, books } : { items: pool, books: [] };
+}

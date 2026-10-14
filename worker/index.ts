@@ -2,7 +2,7 @@ import { ImageResponse } from "workers-og";
 import { cardTree, mapCardTree, mapHtml, parseMapShare, parseScores, resultHtml } from "./share";
 import { handleGroups } from "./groups";
 
-const CARD_VERSION = 4;
+const CARD_VERSION = 5;
 type Env = { ASSETS: Fetcher; DB?: D1Database; GROUPS_ENABLED?: string };
 let fonts: Promise<Array<{ name: string; data: ArrayBuffer; weight: 400 | 700; style: "normal" }>> | null = null;
 function loadFonts(env: Env) {

@@ -79,6 +79,10 @@
     {
       "source": "/d/:n",
       "destination": "/api/d?n=:n"
+    },
+    {
+      "source": "/i",
+      "destination": "/api/i"
     }
   ],
   "functions": {

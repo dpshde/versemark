@@ -2760,3 +2760,13 @@ button:disabled {
 .home-insight .bible-map-key { display: none; }
 .home-insight--empty { border-style: dashed; text-align: center; align-items: center; }
 .home-insight--empty .home-insight-text { color: var(--ink-2); }
+.unlock-toast { display: flex; align-items: center; gap: 6px; font: inherit; color: var(--ink); cursor: pointer; pointer-events: auto; }
+.unlock-toast-mark { color: var(--accent); font-size: 0.75rem; }
+.unlock-toast--inline { position: static; transform: none; margin: 0 auto var(--space-sm); max-width: 100%; box-shadow: none; animation: fadeIn var(--dur-mid) var(--ease-out) both; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.insight-lead .btn-primary { margin-top: var(--space-md); width: 100%; }
+.compare-maps .compare-you { margin-top: var(--space-md); }
+.compare-sections li { grid-template-columns: 1fr 4rem 4rem; }
+.compare-sections li.ahead .compare-yours { color: var(--success); font-weight: 600; }
+.compare-sections li.behind .compare-yours { color: var(--accent-deep); }
+.compare-cta { flex-direction: column; gap: var(--space-sm); margin-top: var(--space-sm); }
