@@ -10,21 +10,28 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build:data": "node scripts/build-data.mjs",
-    "typecheck": "tsc -b --pretty false"
+    "typecheck": "tsc -b --pretty false",
+    "deploy": "cf deploy",
+    "cf:dev": "cf dev"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.64.0",
+    "@cloudflare/workers-types": "^5.20261014.1",
     "@types/node": "^22.10.0",
+    "cf": "1.0.0-beta.13",
     "jsdom": "^25.0.1",
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
     "vite-plugin-pwa": "^1.3.0",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "wrangler": "^4.151.0"
   },
   "dependencies": {
     "@resvg/resvg-js": "^2.6.2",
     "grab-bcv": "^0.1.7",
     "satori": "^0.57.2",
     "snd-lib": "^1.2.4",
-    "web-haptics": "^0.0.6"
+    "web-haptics": "^0.0.6",
+    "workers-og": "^0.0.27"
   }
 }
