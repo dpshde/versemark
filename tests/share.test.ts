@@ -45,8 +45,8 @@ describe("share string", () => {
       },
     ];
     const s = buildDailyShareString(12, rounds);
-    expect(s).toBe(
-      "Versemark 12 Aug 2026 · 2100 pts\n\n980 · 720 · 310 · 90\n\nhttps://versemark.app"
+    expect(s).toMatch(
+      /^Versemark 12 Aug 2026 · 2100 pts\n\n980 · 720 · 310 · 90\n\nhttps:\/\/versemark\.app\/d\/12\?s=980-\d+\.720-\d+\.310-600\.90-4900$/
     );
     expect(s).toContain("https://versemark.app");
     expect(s).not.toMatch(/⭐|✨/);
