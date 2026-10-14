@@ -9,7 +9,12 @@ export default defineConfig({
     entrypoint: "worker/index.ts",
     workersDev: true,
     observability: { enabled: true, logs: { enabled: true } },
-    assets: { runWorkerFirst: ["/d/*", "/api/*"], notFoundHandling: "single-page-application" },
-    env: { ASSETS: bindings.assets() },
+    assets: { runWorkerFirst: ["/d/*", "/api/*", "/g", "/g/*"], notFoundHandling: "single-page-application" },
+    env: {
+      ASSETS: bindings.assets(),
+      // Groups prototype (free-tier D1). Flip GROUPS_ENABLED to "0" to hide /g and /api/groups.
+      DB: bindings.d1({ name: "versemark-groups" }),
+      GROUPS_ENABLED: { type: "text", value: "1" },
+    },
   },
 });
