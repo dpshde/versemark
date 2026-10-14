@@ -14,10 +14,9 @@ function parseScores(s: string | null): ShareRound[] {
 }
 function clamp(n: number, lo: number, hi: number) { return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : NaN; }
 function fmtDistance(d: number): string { return d === 0 ? "exact" : `${d} verse${d === 1 ? "" : "s"} off`; }
-export const config = { runtime: "edge" };
 const h = (type: string, style: Record<string, unknown>, children?: unknown) => ({ type, props: { style, children } });
 
-export default function handler(req: Request) {
+export function GET(req: Request) {
   const url = new URL(req.url);
   const n = Number.parseInt(url.searchParams.get("n") ?? "", 10);
   const rounds = parseScores(url.searchParams.get("s"));

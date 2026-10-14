@@ -1,7 +1,3 @@
-const SEGMENTS: Array<[string, number]> = [
-  ["#6ec272", 5852], ["#e1755a", 7018], ["#bc88f4", 4785], ["#e36558", 5490],
-  ["#ee7d8d", 4786], ["#00beaf", 2767], ["#e36558", 404],
-];
 interface ShareRound { total: number; distance: number }
 /** s = "980-12.720-40.310-150" → per-verse total-distance (spoiler-safe: no positions). */
 function parseScores(s: string | null): ShareRound[] {
@@ -12,7 +8,6 @@ function parseScores(s: string | null): ShareRound[] {
   }).filter((r) => Number.isFinite(r.total) && Number.isFinite(r.distance));
 }
 function clamp(n: number, lo: number, hi: number) { return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : NaN; }
-function fmtDistance(d: number): string { return d === 0 ? "exact" : `${d} verse${d === 1 ? "" : "s"} off`; }
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
