@@ -2770,3 +2770,6 @@ button:disabled {
 .compare-sections li.ahead .compare-yours { color: var(--success); font-weight: 600; }
 .compare-sections li.behind .compare-yours { color: var(--accent-deep); }
 .compare-cta { flex-direction: column; gap: var(--space-sm); margin-top: var(--space-sm); }
+
+/* Screen-level CTAs under cards span the card column */
+.btn-row.compare-cta { max-width: none; align-self: stretch; margin-top: var(--space-lg); }
