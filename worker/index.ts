@@ -1,7 +1,8 @@
 import { ImageResponse } from "workers-og";
 import { cardTree, parseScores, resultHtml } from "./share";
+import { handleGroups } from "./groups";
 
-type Env = { ASSETS: Fetcher };
+type Env = { ASSETS: Fetcher; DB?: D1Database; GROUPS_ENABLED?: string };
 let fonts: Promise<Array<{ name: string; data: ArrayBuffer; weight: 400 | 700; style: "normal" }>> | null = null;
 function loadFonts(env: Env) {
   // Source Serif 4 (OFL) ships as a static asset — no third-party fetch.
@@ -15,6 +16,8 @@ function loadFonts(env: Env) {
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
+    const g = await handleGroups(req, env, url);
+    if (g) return g;
     const m = url.pathname.match(/^\/d\/(\d{1,5})\/?$/);
     if (m) {
       return new Response(resultHtml(url.origin, Number(m[1]), url.searchParams.get("s") ?? ""), {

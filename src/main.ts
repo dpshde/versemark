@@ -20,6 +20,7 @@ import { CanonStrip } from "./lib/strip";
 import { formatVerseLabel, BOOKS } from "./lib/books";
 import { bookSegments, bookSegmentAtT, testamentSeamT, type ZoomPreset } from "./lib/axis";
 import { shareText } from "./lib/share";
+import { postDailyToGroup } from "./lib/group";
 import {
   parseGuessText,
   progressiveInsertText,
@@ -2404,6 +2405,15 @@ function makeResultPanel(round: RoundData): HTMLElement {
       }
     });
     actions.append(shareBtn);
+    if (round.mode === "daily" && round.puzzleNumber != null && round.daily) {
+      const dailyTotal = round.daily.results.reduce((sum, r) => sum + r.total, 0);
+      void postDailyToGroup(round.puzzleNumber, dailyTotal).then((g) => {
+        if (!g) return;
+        const link = el("a", { class: "btn-secondary", id: "btn-group-board", text: `${g.name} leaderboard` });
+        link.setAttribute("href", `/g/${g.code}`);
+        actions.append(link);
+      });
+    }
   }
 
   if (round.mode === "endless") {
