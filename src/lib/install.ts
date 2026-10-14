@@ -15,6 +15,9 @@ import {
 /** Practice rounds before the install offer unlocks (without a daily). */
 export const PRACTICE_ROUNDS_FOR_INSTALL = 3;
 
+/** Completed dailies before the install offer unlocks (habit signal). */
+export const DAILIES_FOR_INSTALL = 3;
+
 /** Days to wait after "Not now" before offering again. */
 export const INSTALL_SNOOZE_DAYS = 14;
 
@@ -71,8 +74,7 @@ function isSnoozed(state: AppState, now: Date = new Date()): boolean {
 
 /** Enough play that an install pitch is fair. */
 export function hasInstallEngagement(state: AppState = loadState()): boolean {
-  if (completedDailyCount(state) >= 1) return true;
-  return state.practiceRounds >= PRACTICE_ROUNDS_FOR_INSTALL;
+  return completedDailyCount(state) >= DAILIES_FOR_INSTALL;
 }
 
 /**

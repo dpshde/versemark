@@ -23,6 +23,27 @@ import { localDatePartsForPuzzleNumber } from "./daily";
 /** Public site — included at the end of share text. */
 export const APP_URL = "https://versemark.app";
 
+/** Origin for share links — current host on previews, prod otherwise. */
+export function shareOrigin(): string {
+  if (typeof location !== "undefined" && /^https?:$/.test(location.protocol) && !/^(localhost|127\.)/.test(location.hostname)) {
+    return location.origin;
+  }
+  return APP_URL;
+}
+
+/**
+ * Per-day results link: `/d/<n>?s=<total>-<distance>.…` — spoiler-safe
+ * (scores + verse distance only, never positions). Unfurls with a score card.
+ */
+export function buildDailyResultUrl(
+  puzzleNumber: number,
+  rounds: Array<Pick<DailyShareRound, "total" | "distance">>,
+  origin: string = shareOrigin()
+): string {
+  const s = rounds.map((r) => `${Math.round(r.total)}-${Math.round(r.distance)}`).join(".");
+  return `${origin}/d/${puzzleNumber}?s=${s}`;
+}
+
 const MONTHS_SHORT = [
   "Jan",
   "Feb",
@@ -74,7 +95,7 @@ export function buildDailyShareString(
   const total = rounds.reduce((sum, round) => sum + round.total, 0);
   const date = formatShareDateForPuzzle(puzzleNumber);
   const scores = rounds.map((round) => String(round.total)).join(" \u00B7 ");
-  return `Versemark ${date} \u00B7 ${formatPoints(total)}\n\n${scores}\n\n${APP_URL}`;
+  return `Versemark ${date} \u00B7 ${formatPoints(total)}\n\n${scores}\n\n${buildDailyResultUrl(puzzleNumber, rounds)}`;
 }
 
 export interface SharePayload {

@@ -3,6 +3,7 @@ import {
   hasInstallEngagement,
   shouldOfferInstall,
   PRACTICE_ROUNDS_FOR_INSTALL,
+  DAILIES_FOR_INSTALL,
   INSTALL_SNOOZE_DAYS,
   isStandalone,
 } from "../src/lib/install";
@@ -68,27 +69,23 @@ describe("install engagement", () => {
     expect(shouldOfferInstall()).toBe(false);
   });
 
-  it("unlocks after one completed daily", () => {
-    recordDailyResult(completeDaily(1, "2026-08-01"), new Date(2026, 7, 1));
+  it("unlocks only after DAILIES_FOR_INSTALL completed dailies", () => {
+    for (let i = 1; i < DAILIES_FOR_INSTALL; i++) {
+      recordDailyResult(completeDaily(i, `2026-08-0${i}`), new Date(2026, 7, i));
+      expect(hasInstallEngagement()).toBe(false);
+    }
+    recordDailyResult(completeDaily(3, "2026-08-03"), new Date(2026, 7, 3));
     expect(hasInstallEngagement()).toBe(true);
-    expect(shouldOfferInstall(loadState(), new Date(2026, 7, 1))).toBe(true);
+    expect(shouldOfferInstall(loadState(), new Date(2026, 7, 3))).toBe(true);
   });
 
-  it("unlocks after enough practice rounds", () => {
-    for (let i = 0; i < PRACTICE_ROUNDS_FOR_INSTALL - 1; i++) {
-      recordPracticeRound();
-    }
+  it("practice rounds alone do not unlock", () => {
+    for (let i = 0; i < PRACTICE_ROUNDS_FOR_INSTALL + 5; i++) recordPracticeRound();
     expect(hasInstallEngagement()).toBe(false);
-    recordPracticeRound();
-    expect(loadState().practiceRounds).toBe(PRACTICE_ROUNDS_FOR_INSTALL);
-    expect(hasInstallEngagement()).toBe(true);
-    expect(shouldOfferInstall()).toBe(true);
   });
 
   it("snoozes after dismiss for INSTALL_SNOOZE_DAYS", () => {
-    recordPracticeRound();
-    recordPracticeRound();
-    recordPracticeRound();
+    for (let i = 1; i <= 3; i++) recordDailyResult(completeDaily(i, `2026-08-0${i}`), new Date(2026, 7, i));
     const dismissedAt = new Date(2026, 7, 1, 12);
     dismissInstallOffer(dismissedAt);
     expect(
