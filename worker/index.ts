@@ -1,7 +1,8 @@
 import { ImageResponse } from "workers-og";
-import { cardTree, parseScores, resultHtml } from "./share";
+import { cardTree, mapCardTree, mapHtml, parseMapShare, parseScores, resultHtml } from "./share";
 import { handleGroups } from "./groups";
 
+const CARD_VERSION = 4;
 type Env = { ASSETS: Fetcher; DB?: D1Database; GROUPS_ENABLED?: string };
 let fonts: Promise<Array<{ name: string; data: ArrayBuffer; weight: 400 | 700; style: "normal" }>> | null = null;
 function loadFonts(env: Env) {
@@ -24,16 +25,26 @@ export default {
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" },
       });
     }
+    if (url.pathname === "/i" || url.pathname === "/i/") {
+      return new Response(mapHtml(url.origin, url.search, parseMapShare(url.searchParams)), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" },
+      });
+    }
     if (url.pathname === "/api/og") {
       const cache = caches.default;
-      const hit = await cache.match(req);
+      // Card version in the cache key so a redeploy never serves a stale design.
+      const key = new Request(`${url.origin}${url.pathname}${url.search}${url.search ? "&" : "?"}_cv=${CARD_VERSION}`);
+      const hit = await cache.match(key);
       if (hit) return hit;
       const n = Number.parseInt(url.searchParams.get("n") ?? "", 10);
-      const res = new ImageResponse(cardTree(Number.isFinite(n) ? n : null, parseScores(url.searchParams.get("s"))) as never, {
+      const tree = url.searchParams.get("kind") === "map"
+        ? mapCardTree(parseMapShare(url.searchParams))
+        : cardTree(Number.isFinite(n) ? n : null, parseScores(url.searchParams.get("s")));
+      const res = new ImageResponse(tree as never, {
         width: 1200, height: 630, fonts: await loadFonts(env),
         headers: { "cache-control": "public, max-age=86400, immutable" },
       } as never);
-      ctx.waitUntil(cache.put(req, res.clone()));
+      ctx.waitUntil(cache.put(key, res.clone()));
       return res;
     }
     return env.ASSETS.fetch(req);

@@ -20,6 +20,8 @@ import { CanonStrip } from "./lib/strip";
 import { formatVerseLabel, BOOKS } from "./lib/books";
 import { bookSegments, bookSegmentAtT, testamentSeamT, type ZoomPreset } from "./lib/axis";
 import { shareText } from "./lib/share";
+import { computeInsights, computeMilestones, bookLevel, formatAccuracy, type Insights, type Milestone } from "./lib/insights";
+import { mapShareText, milestoneShareText } from "./lib/insights-share";
 import { postDailyToGroup } from "./lib/group";
 import {
   parseGuessText,
@@ -46,6 +48,7 @@ import {
 } from "./lib/storage";
 import {
   computeMastery,
+  collectScoredRounds,
   computeDistanceTrend,
   formatMiss,
   masteryHeatColor,
@@ -75,6 +78,7 @@ import {
   loadThemePreference,
   themeLabel,
   type ThemePreference,
+  resolvedTheme,
 } from "./lib/theme";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
@@ -370,6 +374,174 @@ function showUnlockToast(ids: string[]): void {
   );
   document.body.append(toast);
   window.setTimeout(() => toast.remove(), 3200);
+}
+
+/** Books that can actually appear (pool coverage) — milestones only ask for these. */
+function poolBookSet(): Set<number> {
+  const set = new Set<number>();
+  for (const item of pool) {
+    const b = BOOKS.find((x) => item.verseIndex >= x.startVerseIndex && item.verseIndex <= x.endVerseIndex);
+    if (b) set.add(b.index);
+  }
+  return set;
+}
+
+function currentInsights(): { ins: Insights; milestones: Milestone[] } {
+  const rounds = collectScoredRounds(loadState());
+  const books = pool.length ? poolBookSet() : undefined;
+  return { ins: computeInsights(rounds, books), milestones: computeMilestones(rounds, books) };
+}
+
+/** Strength level 0..4 → heat color (same olive→terracotta scale as mastery). */
+function levelColor(level: number | null): string {
+  if (level == null) return "var(--rail)";
+  const t = 1 - level / 4;
+  const dark = resolvedTheme() === "dark";
+  const L = dark ? 0.38 + t * 0.28 : 0.84 - t * 0.36;
+  const C = dark ? 0.06 + t * 0.1 : 0.055 + t * 0.12;
+  return `oklch(${L.toFixed(3)} ${C.toFixed(3)} ${(145 - t * 105).toFixed(1)})`;
+}
+
+function shareButton(label: string, text: () => string, cls = "btn-secondary"): HTMLButtonElement {
+  const b = el("button", { class: cls, type: "button", text: label });
+  b.addEventListener("click", async () => {
+    try {
+      const how = await shareText(text());
+      b.textContent = how === "shared" ? "Shared" : "Copied";
+      window.setTimeout(() => (b.textContent = label), 1600);
+    } catch {
+      /* cancelled */
+    }
+  });
+  return b;
+}
+
+function makeBibleMap(ins: Insights): HTMLElement {
+  const wrap = el("div", { class: "bible-map", role: "img", "aria-label": "Your Bible map: strength by book" });
+  const rail = el("div", { class: "bible-map-rail" });
+  ins.books.forEach((b, i) => {
+    const meta = BOOKS[i];
+    const seg = el("span", { class: "bible-map-book", title: `${meta.name}: ${b.rounds ? `${formatAccuracy(b.accuracy)} within a chapter (${b.rounds})` : "not tested"}` });
+    seg.style.flexGrow = String(meta.verses);
+    seg.style.background = levelColor(bookLevel(b));
+    rail.append(seg);
+  });
+  wrap.append(
+    rail,
+    el("div", { class: "bible-map-ends" }, [el("span", { text: "Genesis" }), el("span", { text: "Revelation" })]),
+    el("div", { class: "bible-map-key" }, [
+      el("span", { text: "Gap" }),
+      ...[0, 1, 2, 3, 4].map((l) => { const k = el("i"); k.style.background = levelColor(l); return k; }),
+      el("span", { text: "Strong" }),
+      (() => { const k = el("i", { class: "untested" }); k.style.background = levelColor(null); return k; })(),
+      el("span", { text: "Untested" }),
+    ])
+  );
+  return wrap;
+}
+
+function renderInsights(): void {
+  const { ins, milestones } = currentInsights();
+  app.innerHTML = "";
+  const screen = el("div", { class: "screen achievements insights active", id: "screen-insights" });
+  const back = el("button", { class: "btn-ghost", type: "button", id: "btn-insights-home", "aria-label": "Home", title: "Home" });
+  back.innerHTML = `<svg class="home-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M3.75 10.5 12 3.75l8.25 6.75" />
+    <path d="M5.75 9.25v10h12.5v-10M9.5 19.25v-5.5h5v5.5" />
+  </svg>`;
+  back.addEventListener("click", () => { hapticLight(); renderHome(); });
+  const topActions = el("div", { class: "chrome-top-actions" });
+  topActions.append(makeThemeToggle(), back);
+  const top = el("div", { class: "achievements-top" });
+  top.append(
+    el("div", { class: "achievements-top-spacer", "aria-hidden": "true" }),
+    el("h1", { class: "achievements-heading", text: "Your Bible map" }),
+    el("div", { class: "achievements-top-spacer", "aria-hidden": "true" })
+  );
+  screen.append(topActions, top);
+  const body = el("div", { class: "achievements-body" });
+
+  const lead = el("div", { class: "achievements-summary insight-lead" }, [
+    el("h2", { class: "achievements-section-label", text: "What you know" }),
+    el("p", { class: "insight-headline", text: ins.headline }),
+    makeBibleMap(ins),
+  ]);
+  if (ins.rounds >= 3) lead.append(shareButton("Share my map", () => mapShareText(ins)));
+  body.append(lead);
+
+  if (ins.rounds > 0) {
+    const secBox = el("div", { class: "achievements-summary" }, [
+      el("h2", { class: "achievements-section-label", text: "By section · within one chapter" }),
+    ]);
+    const list = el("ul", { class: "insight-sections" });
+    for (const s of ins.sections) {
+      const bar = el("span", { class: "insight-bar" });
+      const fill = el("i");
+      fill.style.width = `${Math.round((s.accuracy ?? 0) * 100)}%`;
+      fill.style.background = levelColor(s.accuracy == null ? null : Math.round(s.accuracy * 4));
+      bar.append(fill);
+      list.append(el("li", {}, [
+        el("span", { class: "insight-sec-label", text: s.label }),
+        bar,
+        el("span", { class: "insight-sec-val", text: s.rounds ? `${formatAccuracy(s.accuracy)} · ${s.rounds}` : "—" }),
+      ]));
+    }
+    secBox.append(list);
+    const { ot, nt } = ins.testaments;
+    secBox.append(el("p", { class: "insight-note", text: `Old Testament ${formatAccuracy(ot.accuracy)} (${ot.rounds}) · New Testament ${formatAccuracy(nt.accuracy)} (${nt.rounds})` }));
+    for (const b of ins.biases.slice(0, 2)) {
+      secBox.append(el("p", { class: "insight-note", text: `You tend to place ${b.section.label} about ${b.chapters} chapters too ${b.direction}.` }));
+    }
+    if (ins.trend.recent != null && ins.trend.earlier != null) {
+      const d = Math.round((ins.trend.recent - ins.trend.earlier) * 100);
+      secBox.append(el("p", { class: "insight-note", text: `Last ${ins.trend.window} rounds: ${formatAccuracy(ins.trend.recent)} within a chapter (${d >= 0 ? "+" : ""}${d} pts vs your first ${ins.trend.window}).` }));
+    }
+    body.append(secBox);
+  }
+
+  if (ins.strongest.length || ins.weakest.length) {
+    const sw = el("div", { class: "achievements-summary insight-books" }, [
+      el("h2", { class: "achievements-section-label", text: "Strongest · Most missed" }),
+    ]);
+    const cols = el("div", { class: "insight-cols" });
+    const col = (title: string, xs: typeof ins.strongest) =>
+      el("div", {}, [el("h3", { text: title }), ...xs.map((b) => el("p", { text: `${b.label} ${formatAccuracy(b.accuracy)}` }))]);
+    cols.append(col("Strong", ins.strongest), col("Gaps", ins.weakest));
+    sw.append(cols);
+    body.append(sw);
+  }
+
+  if (ins.studyNext.length) {
+    const st = el("div", { class: "achievements-summary" }, [el("h2", { class: "achievements-section-label", text: "Study next" })]);
+    for (const s of ins.studyNext) {
+      const a = el("a", { class: "insight-study", href: s.url, target: "_blank", rel: "noopener" }, [
+        el("strong", { text: s.ref }), el("span", { text: s.why }),
+      ]);
+      st.append(a);
+    }
+    st.append(el("p", { class: "insight-note", text: "Opens the chapter on route.bible." }));
+    body.append(st);
+  }
+
+  const ms = el("div", { class: "achievements-summary" }, [el("h2", { class: "achievements-section-label", text: "Knowledge milestones" })]);
+  const ordered = [...milestones].sort((a, b) => Number(b.unlocked) - Number(a.unlocked) || b.done / b.total - a.done / a.total);
+  for (const m of ordered) {
+    const row = el("div", { class: `insight-milestone${m.unlocked ? " unlocked" : ""}` });
+    const bar = el("span", { class: "insight-bar" });
+    const fill = el("i");
+    fill.style.width = `${Math.round((m.done / Math.max(1, m.total)) * 100)}%`;
+    bar.append(fill);
+    row.append(
+      el("div", { class: "insight-ms-head" }, [el("strong", { text: m.title }), el("span", { text: `${m.done}/${m.total}` })]),
+      el("p", { text: m.detail }),
+      bar
+    );
+    if (m.unlocked || m.done > 0) row.append(shareButton(m.unlocked ? "Share" : "Share progress", () => milestoneShareText(ins, m), "btn-link"));
+    ms.append(row);
+  }
+  body.append(ms);
+  screen.append(body);
+  app.append(screen);
 }
 
 function renderAchievements(): void {
@@ -1315,6 +1487,25 @@ function renderHome(): void {
     }),
     makeHomeTimeline()
   );
+
+  {
+    // Value prop: your personal Bible map, from your own play (local only).
+    const { ins } = currentInsights();
+    const card = el("button", { class: "home-insight", type: "button", id: "btn-insights" });
+    if (ins.rounds >= 3) {
+      card.append(
+        el("span", { class: "home-insight-label", text: "Your Bible map" }),
+        makeBibleMap(ins),
+        el("span", { class: "home-insight-text", text: ins.headline }),
+        el("span", { class: "home-insight-cta", text: "See your gaps →" })
+      );
+    } else {
+      card.classList.add("home-insight--empty");
+      card.append(el("span", { class: "home-insight-text", text: "See what you know about the Bible — and where your gaps are." }));
+    }
+    card.addEventListener("click", () => { hapticLight(); renderInsights(); });
+    panel.append(card);
+  }
 
   if (state.streak > 0) {
     panel.append(

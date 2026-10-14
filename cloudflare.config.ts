@@ -9,7 +9,7 @@ export default defineConfig({
     entrypoint: "worker/index.ts",
     workersDev: true,
     observability: { enabled: true, logs: { enabled: true } },
-    assets: { runWorkerFirst: ["/d/*", "/api/*", "/g", "/g/*"], notFoundHandling: "single-page-application" },
+    assets: { runWorkerFirst: ["/d/*", "/api/*", "/g", "/g/*", "/i", "/i/*"], notFoundHandling: "single-page-application" },
     env: {
       ASSETS: bindings.assets(),
       // Groups prototype (free-tier D1). Flip GROUPS_ENABLED to "0" to hide /g and /api/groups.
