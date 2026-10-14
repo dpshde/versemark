@@ -13,11 +13,11 @@ function parseScores(s: string | null): ShareRound[] {
 }
 function clamp(n: number, lo: number, hi: number) { return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : NaN; }
 function fmtDistance(d: number): string { return d === 0 ? "exact" : `${d} verse${d === 1 ? "" : "s"} off`; }
-export const config = { runtime: "edge" };
+
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 /** /d/<n>?s=… → unfurl-friendly HTML, then straight into today's daily (with score-to-beat if same day). */
-export default function handler(req: Request) {
+export function GET(req: Request) {
   const url = new URL(req.url);
   const n = Number.parseInt(url.searchParams.get("n") ?? "", 10) || 0;
   const s = url.searchParams.get("s") ?? "";
