@@ -26,7 +26,7 @@ export function GET(req: Request) {
 <title>${esc(title)}</title><meta name="description" content="${desc}">
 <meta property="og:type" content="website"><meta property="og:site_name" content="Versemark">
 <meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${desc}">
-<meta property="og:url" content="${esc(url.href)}"><meta property="og:image" content="${esc(img)}">
+<meta property="og:url" content="${esc(`${origin}/d/${n}?s=${encodeURIComponent(s)}`)}"><meta property="og:image" content="${esc(img)}">
 <meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${esc(title)}">
 <meta name="twitter:description" content="${desc}"><meta name="twitter:image" content="${esc(img)}">
