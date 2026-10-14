@@ -80,5 +80,10 @@
       "source": "/d/:n",
       "destination": "/api/d?n=:n"
     }
-  ]
+  ],
+  "functions": {
+    "api/og.ts": {
+      "includeFiles": "api/fonts/**"
+    }
+  }
 }

@@ -1,12 +1,14 @@
 import satori from "satori";
 import { Resvg } from "@resvg/resvg-js";
 
-const FONT = "https://cdn.jsdelivr.net/fontsource/fonts/source-serif-4@latest/latin-";
-let fonts: Promise<Array<{ name: string; data: ArrayBuffer; weight: 400 | 700; style: "normal" }>> | null = null;
+import { readFile } from "node:fs/promises";
+
+/** Source Serif 4 (OFL), bundled — no runtime CDN fetch. */
+let fonts: Promise<Array<{ name: string; data: Buffer; weight: 400 | 700; style: "normal" }>> | null = null;
 function loadFonts() {
   fonts ??= Promise.all(([400, 700] as const).map(async (weight) => ({
     name: "Serif", weight, style: "normal" as const,
-    data: await (await fetch(`${FONT}${weight}-normal.woff`)).arrayBuffer(),
+    data: await readFile(new URL(`./fonts/source-serif-4-${weight}.woff`, import.meta.url)),
   })));
   return fonts;
 }
