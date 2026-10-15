@@ -1583,25 +1583,6 @@ function renderHome(): void {
     makeHomeTimeline()
   );
 
-  {
-    // Value prop: your personal Bible map, from your own play (local only).
-    const { ins } = currentInsights();
-    const card = el("button", { class: "home-insight", type: "button", id: "btn-insights" });
-    if (ins.rounds >= 3) {
-      card.append(
-        el("span", { class: "home-insight-label", text: "Your Bible map" }),
-        makeBibleMap(ins),
-        el("span", { class: "home-insight-text", text: ins.headline }),
-        el("span", { class: "home-insight-cta", text: "See your gaps →" })
-      );
-    } else {
-      card.classList.add("home-insight--empty");
-      card.append(el("span", { class: "home-insight-text", text: "See what you know about the Bible — and where your gaps are." }));
-    }
-    card.addEventListener("click", () => { hapticLight(); renderInsights(); });
-    panel.append(card);
-  }
-
   if (state.streak > 0) {
     panel.append(
       el("p", {
@@ -1612,7 +1593,7 @@ function renderHome(): void {
   }
 
   panel.append(
-    el("div", { class: "btn-row" }, [
+    el("div", { class: "btn-row home-actions" }, [
       (() => {
         const b = el("button", {
           class: "btn-primary btn-with-icon",
@@ -1651,6 +1632,26 @@ function renderHome(): void {
     ])
   );
 
+  // Bible map card sits below Daily/Practice (on mobile those pin to a bottom bar).
+  {
+    // Value prop: your personal Bible map, from your own play (local only).
+    const { ins } = currentInsights();
+    const card = el("button", { class: "home-insight", type: "button", id: "btn-insights" });
+    if (ins.rounds >= 3) {
+      card.append(
+        el("span", { class: "home-insight-label", text: "Your Bible map" }),
+        makeBibleMap(ins),
+        el("span", { class: "home-insight-text", text: ins.headline }),
+        el("span", { class: "home-insight-cta", text: "See your gaps →" })
+      );
+    } else {
+      card.classList.add("home-insight--empty");
+      card.append(el("span", { class: "home-insight-text", text: "See what you know about the Bible — and where your gaps are." }));
+    }
+    card.addEventListener("click", () => { hapticLight(); renderInsights(); });
+    panel.append(card);
+  }
+
   // Translation credit: wide-screen footer only (hidden on mobile via CSS).
   const footer = el("footer", {
     class: "home-footer",
@@ -1665,6 +1666,17 @@ function renderHome(): void {
 
   screen.append(panel, footer);
   app.append(screen);
+  {
+    // Pad scroll content by the pinned bar's real height (includes safe-area inset).
+    const bar = panel.querySelector<HTMLElement>(".home-actions");
+    if (bar && typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(() => {
+        if (!bar.isConnected) return ro.disconnect();
+        panel.style.setProperty("--home-bar-h", `${bar.offsetHeight}px`);
+      });
+      ro.observe(bar);
+    }
+  }
 
   // Cache drop-cap art while home is idle so the crown opens without
   // a cascade of image fetches.
