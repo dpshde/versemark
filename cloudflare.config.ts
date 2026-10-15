@@ -8,9 +8,8 @@ export default defineConfig({
     compatibilityDate: "2026-09-01",
     entrypoint: "worker/index.ts",
     workersDev: true,
-    // STAGED, DO NOT ENABLE until Dylan has moved versemark.app DNS to Cloudflare (zone Active).
-    // Then attach Custom Domains versemark.app + www.versemark.app (www 301s to apex in worker/index.ts).
-    // e.g. routes: [{ pattern: "versemark.app", customDomain: true }, { pattern: "www.versemark.app", customDomain: true }],
+    // Prod custom domains (versemark.app zone Active on Cloudflare 2026-10-15). www 301s to apex in worker/index.ts.
+    domains: ["versemark.app", "www.versemark.app"],
     observability: { enabled: true, logs: { enabled: true } },
     assets: { runWorkerFirst: ["/d/*", "/api/*", "/g", "/g/*", "/i", "/i/*"], notFoundHandling: "single-page-application" },
     env: {
