@@ -17,6 +17,11 @@ function loadFonts(env: Env) {
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
+    // Canonical host: once www.versemark.app is attached, 301 it to the apex (one origin for OG cache + share links).
+    if (url.hostname === "www.versemark.app") {
+      url.hostname = "versemark.app";
+      return Response.redirect(url.toString(), 301);
+    }
     const g = await handleGroups(req, env, url);
     if (g) return g;
     const m = url.pathname.match(/^\/d\/(\d{1,5})\/?$/);
@@ -34,6 +39,8 @@ export default {
       const cache = caches.default;
       // Card version in the cache key so a redeploy never serves a stale design.
       const key = new Request(`${url.origin}${url.pathname}${url.search}${url.search ? "&" : "?"}_cv=${CARD_VERSION}`);
+      // The Cache API is a no-op on *.workers.dev, so every card renders cold there (~0.5-1s CPU).
+      // On the versemark.app custom domain this cache serves repeats from the edge.
       const hit = await cache.match(key);
       if (hit) return hit;
       const n = Number.parseInt(url.searchParams.get("n") ?? "", 10);

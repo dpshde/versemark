@@ -43,12 +43,12 @@ export async function handleGroups(req: Request, env: Env, url: URL): Promise<Re
     const rows = await db.prepare("SELECT player, total FROM scores WHERE code = ? AND puzzle = ? ORDER BY total DESC LIMIT 50").bind(code, n).all();
     return json({ ...g, puzzle: n, board: rows.results });
   }
-  if (p === "/g" || p === "/g/") return page("Start a Versemark group", NEW_BODY);
+  if (p === "/g" || p === "/g/") return page("Start a Versemark group", NEW_BODY, 200, url.origin);
   const gm = p.match(/^\/g\/([A-Z0-9]{6})\/?$/);
   if (gm) {
     const g = await db.prepare("SELECT name FROM groups WHERE code = ?").bind(gm[1]).first<{ name: string }>();
-    if (!g) return page("Group not found", `<h1>Group not found</h1><p><a href="/g">Start a group</a></p>`, 404);
-    return page(`${g.name} · Versemark group`, BOARD_BODY(gm[1], g.name));
+    if (!g) return page("Group not found", `<h1>Group not found</h1><p><a href="/g">Start a group</a></p>`, 404, url.origin);
+    return page(`${g.name} · Versemark group`, BOARD_BODY(gm[1], g.name), 200, url.origin);
   }
   return null;
 }
@@ -62,9 +62,9 @@ li{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px s
 .code{font:700 26px ui-monospace,monospace;letter-spacing:4px}.bar{display:flex;height:10px;margin:8px 0 26px}.bar i{display:block}`;
 const BAR = `<div class="bar"><i style="flex:5852;background:#6ec272"></i><i style="flex:7018;background:#e1755a"></i><i style="flex:4785;background:#bc88f4"></i><i style="flex:5490;background:#e36558"></i><i style="flex:4786;background:#ee7d8d"></i><i style="flex:2767;background:#00beaf"></i><i style="flex:404;background:#e36558"></i></div>`;
 const TODAY_JS = `function today(){var e=new Date(2026,7,1),d=new Date();d=new Date(d.getFullYear(),d.getMonth(),d.getDate());return Math.round((d-e)/864e5)+1}`;
-function page(title: string, body: string, status = 200) {
+function page(title: string, body: string, status = 200, origin = "https://versemark.app") {
   return new Response(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>
-<meta property="og:title" content="${esc(title)}"><meta property="og:image" content="/api/og"><style>${CSS}</style></head><body>${body}</body></html>`,
+<meta property="og:title" content="${esc(title)}"><meta property="og:image" content="${origin}/api/og"><style>${CSS}</style></head><body>${body}</body></html>`,
     { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
 }
 const NEW_BODY = `<h1>Start a group</h1><p class="m">Everyone plays the same daily. Your group sees one leaderboard. No accounts.</p>${BAR}
