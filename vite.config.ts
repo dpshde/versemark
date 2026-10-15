@@ -1,8 +1,15 @@
 import { defineConfig } from "vitest/config";
 import { VitePWA } from "vite-plugin-pwa";
 import { cloudflare } from "@cloudflare/vite-plugin";
+import { voidPlugin } from "void";
 
+/** Workers Builds / `cf deploy` path — keep default; never flip this for Void spike deploys. */
 const CF_BUILD = !!process.env.CF_BUILD;
+/**
+ * SPIKE ONLY: opt into Void's Vite plugin for local `void`/`vite` DX comparison.
+ * Mutually exclusive with CF_BUILD so Workers Builds + cloudflare.config.ts stay intact.
+ */
+const VOID_BUILD = !!process.env.VOID_BUILD && !CF_BUILD;
 /** Where cf's Build Output collects the client assets; the service worker must land beside them. */
 const CF_ASSETS_DIR = ".cloudflare/output/v0/workers/default/assets";
 
@@ -13,6 +20,9 @@ export default defineConfig({
     // Cloudflare build (mise run deploy sets CF_BUILD): Worker for share links + OG cards.
     // Plain `vite build` (tests, Vercel fallback) stays a static site.
     ...(CF_BUILD ? [cloudflare() as never] : []),
+    // Void spike (VOID_BUILD=1): voidPlugin wraps Cloudflare Workers runtime for Void CLI deploys.
+    // Do not enable alongside CF_BUILD — prod stays on Workers Builds.
+    ...(VOID_BUILD ? (voidPlugin() as never[]) : []),
     // Cast: vite-plugin-pwa targets root vite; vitest nests its own vite types.
     VitePWA({
       registerType: "autoUpdate",

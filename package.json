@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -12,7 +15,9 @@
     "build:data": "node scripts/build-data.mjs",
     "typecheck": "tsc -b --pretty false",
     "deploy": "cf deploy",
-    "cf:dev": "cf dev"
+    "cf:dev": "cf dev",
+    "dev:void": "VOID_BUILD=1 vite",
+    "deploy:void": "npm run build && void deploy --platform cloudflare --dir dist --spa --skip-build"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.64.0",
@@ -21,9 +26,10 @@
     "cf": "1.0.0-beta.13",
     "jsdom": "^25.0.1",
     "typescript": "^5.7.2",
-    "vite": "^6.0.3",
+    "vite": "^8.3.4",
     "vite-plugin-pwa": "^1.3.0",
     "vitest": "^2.1.8",
+    "void": "^1.1.11",
     "wrangler": "^4.151.0"
   },
   "dependencies": {
@@ -33,5 +39,13 @@
     "snd-lib": "^1.2.4",
     "web-haptics": "^0.0.6",
     "workers-og": "^0.0.27"
+  },
+  "allowScripts": {
+    "workerd@1.20261006.1": true,
+    "workerd@1.20261012.1": true,
+    "esbuild@0.18.20": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true,
+    "esbuild@0.21.5": true
   }
 }
