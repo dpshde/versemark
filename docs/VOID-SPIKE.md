@@ -6,6 +6,17 @@
 
 Spike date: 2026-10-15. Void package: `void@1.1.11`. Blog: [Deploy with Void](https://blog.cloudflare.com/deploy-with-void/).
 
+### Deploy status (cloud agent)
+
+| Item | Status |
+| --- | --- |
+| Code / docs / draft PR | Done — branch `spike/void`, PR #15 |
+| Bundle / DX / go-no-go measurements | Done (this doc) |
+| Live `versemark-void-spike` upload | **Blocked** — no Cloudflare credentials in the agent VM |
+
+`void deploy` without a session exits with: *“Cloudflare authentication is required. Set `CLOUDFLARE_API_TOKEN` in CI, or run `void cloudflare login` in an interactive terminal.”*  
+Device OAuth via `cf auth login --no-browser --device` was started repeatedly; codes timed out without dashboard approval. Prefer completing OAuth (or a one-shot local `npm run deploy:void`) over adding an API token — see Auth section.
+
 ---
 
 ## Recommendation: **NO-GO for prod cutover** (spike useful)
@@ -61,11 +72,11 @@ So Void can sit on a spike branch (or behind flags) **without** forcing `main` o
 
 | Context | Void behavior | vs Versemark preference |
 | --- | --- | --- |
-| Interactive `void deploy` / `void cloudflare login` | Browser **OAuth** (Void CLI built on **`cf`**) | **Compatible** with no-API-token / `cf` OAuth |
-| This cloud agent | Used `cf auth login --no-browser --device` (same OAuth grant) | Preferred path; no token required if approved |
-| CI / GitHub Actions (`void init --github`) | Docs require **`CLOUDFLARE_API_TOKEN`** (+ account id when multi-account) | **Breaks** a strict no-API-token CI rule — same class of requirement as `cf` in CI |
+| Interactive `void cloudflare login` / `cf auth login` | Browser / device **OAuth** (Void CLI built on **`cf`**) | **Compatible** with no-API-token / `cf` OAuth |
+| Non-interactive agent / CI (`void deploy` with no session) | **Requires `CLOUDFLARE_API_TOKEN`** (Void’s own error text) | **Breaks** no-API-token rule unless OAuth was completed earlier on that machine |
+| CI / GitHub Actions (`void init --github`) | Docs require **`CLOUDFLARE_API_TOKEN`** (+ account id when multi-account) | Same class of requirement as `cf` in CI |
 
-**Documented gap:** Void does **not** remove the need for an API token in unattended CI. Interactive deploys can stay OAuth-only; automating Void the way Workers Builds does today would still need a token (or stay on Workers Builds).
+**Documented gap:** Void does **not** remove the need for an API token in unattended CI or headless agents. Interactive deploys can stay OAuth-only; automating Void the way Workers Builds does today would still need a token (or stay on Workers Builds). **Void does not invent a new OAuth-only CI path.**
 
 ---
 
@@ -120,19 +131,20 @@ Friction: Node 24 + Vite 8 upgrade tax; Void’s nested `cf@1.0.0-beta.17` vs pr
 | --- | --- |
 | Branch | `spike/void` |
 | Preview Worker | `versemark-void-spike` |
-| Preview URL | `https://versemark-void-spike.<account-subdomain>.workers.dev` — **set after successful `void deploy`** (see deploy log / `void project status`) |
-| PR | Draft PR from `spike/void` → `main` (do not merge) |
+| Preview URL | **Pending live deploy** — expect `https://versemark-void-spike.<subdomain>.workers.dev` after OAuth + `deploy:void` |
+| PR | https://github.com/dpshde/versemark/pull/15 (draft; do not merge) |
 
-### Deploy commands (after OAuth)
+### Deploy commands (Dylan / local — after OAuth)
 
 ```bash
-# Node ≥24.21 for void CLI
-npm run build
-npx void deploy --platform cloudflare --dir dist --spa --skip-build
-# Confirm name in void.config.ts is still versemark-void-spike before running
+# Node ≥24.21 for void CLI (nvm use 24 / mise)
+git checkout spike/void && npm ci
+# Confirm void.config.ts cloudflare.name === "versemark-void-spike" (never "versemark")
+npx void cloudflare login   # or: npx cf auth login
+npm run deploy:void         # build + void deploy --platform cloudflare --dir dist --spa --skip-build
 ```
 
-Auth: `cf auth login` or `void cloudflare login` (OAuth). Avoid `CLOUDFLARE_API_TOKEN` unless documenting an intentional break of the no-API-token rule.
+Paste the printed workers.dev URL into this doc / PR when live. Avoid `CLOUDFLARE_API_TOKEN` unless intentionally breaking the no-API-token rule (document that if used).
 
 ---
 
