@@ -7,7 +7,7 @@ const CF_BUILD = !!process.env.CF_BUILD;
 const CF_ASSETS_DIR = ".cloudflare/output/v0/workers/default/assets";
 
 export default defineConfig({
-  base: "./",
+  base: "/",
   publicDir: "public",
   plugins: [
     // Cloudflare build (mise run deploy sets CF_BUILD): Worker for share links + OG cards.
