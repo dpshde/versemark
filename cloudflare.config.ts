@@ -18,11 +18,22 @@ export default defineConfig({
     ...(isPreviewCi ? {} : { domains: ["versemark.app", "www.versemark.app"] }),
     observability: { enabled: true, logs: { enabled: true } },
     assets: {
-      // Worker owns /d /api /g /i; missing static files must 404 (not SPA HTML).
-      // App shell is only at / (real index.html asset) — no path-based client routes.
-      runWorkerFirst: ["/d/*", "/api/*", "/g", "/g/*", "/i", "/i/*", "/favicon.ico", "/robots.txt"],
+      // Worker owns app + share routes so / always gets index.html (html_handling alone is not enough
+      // when not_found_handling is none). Missing extensioned files still 404 via the Worker.
+      runWorkerFirst: [
+        "/",
+        "/d/*",
+        "/api/*",
+        "/g",
+        "/g/*",
+        "/i",
+        "/i/*",
+        "/favicon.ico",
+        "/robots.txt",
+      ],
       notFoundHandling: "none",
-      htmlHandling: "none",
+      // So ASSETS.fetch("/index.html") and bare "/" resolve correctly when the binding is used.
+      htmlHandling: "auto-trailing-slash",
     },
     env: {
       ASSETS: bindings.assets(),
