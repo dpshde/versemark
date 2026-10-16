@@ -1,5 +1,11 @@
 import { bindings, defineConfig } from "cf/config";
 
+// Preview uploads reject `domains` — only attach custom domains on production (main) / local deploy.
+const isPreviewCi =
+  process.env.WORKERS_CI === "1" &&
+  Boolean(process.env.WORKERS_CI_BRANCH) &&
+  process.env.WORKERS_CI_BRANCH !== "main";
+
 // Static Vite build served as Worker assets; the Worker only handles share links + OG cards.
 export default defineConfig({
   accountId: "91ff2c2b757414041aeaa00896a8a43f",
@@ -9,7 +15,7 @@ export default defineConfig({
     entrypoint: "worker/index.ts",
     workersDev: true,
     // Custom domains attached at CF cutover (2026-10-15). Keep so Workers Builds redeploys preserve them.
-    domains: ["versemark.app", "www.versemark.app"],
+    ...(isPreviewCi ? {} : { domains: ["versemark.app", "www.versemark.app"] }),
     observability: { enabled: true, logs: { enabled: true } },
     assets: {
       // Worker owns /d /api /g /i; missing static files must 404 (not SPA HTML).
