@@ -1,6 +1,7 @@
 import { ImageResponse } from "workers-og";
 import { cardTree, mapCardTree, mapHtml, parseMapShare, parseScores, resultHtml } from "./share";
 import { handleGroups } from "./groups";
+import { looksLikeStaticAsset, serveStaticAsset } from "./static";
 
 const CARD_VERSION = 5;
 type Env = { ASSETS: Fetcher; DB?: D1Database; GROUPS_ENABLED?: string };
@@ -77,6 +78,10 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
       } as never);
       ctx.waitUntil(cache.put(key, res.clone()));
       return res;
+    }
+    // Missing .js/.ico/etc. must 404 — never index.html (see notFoundHandling: "none").
+    if (looksLikeStaticAsset(url.pathname)) {
+      return serveStaticAsset(env, req, url.pathname);
     }
     return env.ASSETS.fetch(req);
 }

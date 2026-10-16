@@ -11,7 +11,13 @@ export default defineConfig({
     // Custom domains attached at CF cutover (2026-10-15). Keep so Workers Builds redeploys preserve them.
     domains: ["versemark.app", "www.versemark.app"],
     observability: { enabled: true, logs: { enabled: true } },
-    assets: { runWorkerFirst: ["/d/*", "/api/*", "/g", "/g/*", "/i", "/i/*"], notFoundHandling: "single-page-application" },
+    assets: {
+      // Worker owns /d /api /g /i; missing static files must 404 (not SPA HTML).
+      // App shell is only at / (real index.html asset) — no path-based client routes.
+      runWorkerFirst: ["/d/*", "/api/*", "/g", "/g/*", "/i", "/i/*", "/favicon.ico", "/robots.txt"],
+      notFoundHandling: "none",
+      htmlHandling: "none",
+    },
     env: {
       ASSETS: bindings.assets(),
       // Groups prototype (free-tier D1). Flip GROUPS_ENABLED to "0" to hide /g and /api/groups.
