@@ -17,12 +17,20 @@ const INDEX_HTML = `<!DOCTYPE html><html lang="en"><head><title>Versemark</title
 function mockAssets(files: Record<string, Response | (() => Response)>) {
   return {
     fetch: vi.fn(async (input: RequestInfo | URL) => {
-      const path = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url).pathname;
+      const path = new URL(
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+      ).pathname;
       const hit = files[path];
       if (!hit) return new Response("missing", { status: 404 });
       return typeof hit === "function" ? hit() : hit.clone();
     }),
   };
+}
+
+function must(res: Response | null): Response {
+  expect(res).not.toBeNull();
+  if (!res) throw new Error("expected response");
+  return res;
 }
 
 describe("robots.txt", () => {
@@ -64,10 +72,7 @@ describe("serveSpaShell", () => {
         headers: { "content-type": "text/html; charset=utf-8" },
       }),
     });
-    const res = await serveSpaShell(
-      { ASSETS: assets },
-      new Request("https://versemark.app/"),
-    );
+    const res = await serveSpaShell({ ASSETS: assets }, new Request("https://versemark.app/"));
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toMatch(/text\/html/);
     expect(await res.text()).toContain("Versemark");
@@ -130,7 +135,7 @@ describe("Worker routeApp", () => {
         }),
       }),
     };
-    const res = await routeApp(new Request("https://versemark.app/"), env as never);
+    const res = must(await routeApp(new Request("https://versemark.app/"), env as never));
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toMatch(/text\/html/);
     expect(await res.text()).toContain("Versemark");
@@ -138,7 +143,7 @@ describe("Worker routeApp", () => {
 
   it("/d/jhn.3.16 renders share HTML that hands off to today's daily", async () => {
     const env = { ASSETS: mockAssets({}) };
-    const res = await routeApp(new Request("https://versemark.app/d/jhn.3.16"), env as never);
+    const res = must(await routeApp(new Request("https://versemark.app/d/jhn.3.16"), env as never));
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toMatch(/text\/html/);
     const body = await res.text();
@@ -151,7 +156,7 @@ describe("Worker routeApp", () => {
 
   it("/x.js returns 404, not the SPA shell", async () => {
     const env = { ASSETS: mockAssets({}) };
-    const res = await routeApp(new Request("https://versemark.app/x.js"), env as never);
+    const res = must(await routeApp(new Request("https://versemark.app/x.js"), env as never));
     expect(res.status).toBe(404);
     expect(res.headers.get("content-type")).toMatch(/text\/plain/);
     expect(await res.text()).toBe("Not Found");
@@ -160,7 +165,7 @@ describe("Worker routeApp", () => {
   it("/.env and /next.config.mjs return 404", async () => {
     const env = { ASSETS: mockAssets({}) };
     for (const path of ["/.env", "/next.config.mjs"]) {
-      const res = await routeApp(new Request(`https://versemark.app${path}`), env as never);
+      const res = must(await routeApp(new Request(`https://versemark.app${path}`), env as never));
       expect(res.status).toBe(404);
     }
   });
