@@ -2,6 +2,10 @@
 
 Architecture decision records (ADRs) for Versemark (`versemark`).
 
+**Shared selah.tools ADRs** (cross-app) live in the Cursor Project Agent Store at
+`/cursor/stores/self/docs/adrs/INDEX.md`. Add a shared ADR there when a decision affects
+more than one app; keep Versemark-only decisions in this folder.
+
 ## Conventions
 
 - Template: [MADR](https://adr.github.io/madr/) (context, decision drivers, considered options with pros/cons, outcome, consequences).
